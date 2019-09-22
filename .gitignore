@@ -4,3 +4,4 @@ logs
 npm-debug.log*
 .npm
 .env
+public

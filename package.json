@@ -8,14 +8,10 @@
     "build": "npm run build --prefix client",
     "server": "nodemon src/index.js",
     "client": "npm run serve --prefix client",
-    "heroku-prebuild": "npm i --prefix client",
-    "heroku-postbuild": "./node_modules/.bin/vue-cli-service build --prefix client",
+    "heroku-postbuild": "npm i --prefix client && npx vue-cli-service build --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\" "
   },
   "keywords": [],
-  "engines": {
-    "node": "10.16.3"
-  },
   "author": "Jeferson S. Brito",
   "license": "ISC",
   "dependencies": {

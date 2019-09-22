@@ -1,5 +1,16 @@
 <template>
   <main class="chat">
+    <header>
+      <nav>
+        <h4>ChatMe</h4>
+        <div class="sidebar-mobile">
+          <button class="toggle__sidebar" @click="isActive = true">{{room}}</button>
+          <ul :class="['users', isActive ? 'show' : '']">
+            <li v-for="user in users" :key="user.id">{{ user.username }}</li>
+          </ul>
+        </div>
+      </nav>
+    </header>
     <aside id="sidebar" class="chat__sidebar">
       <h2 class="room-title">{{room}}</h2>
       <h3 class="list-title">Users</h3>
@@ -46,6 +57,7 @@
 
 <script>
 import io from 'socket.io-client'
+import notify from '../services/notify'
 
 export default {
   name: 'Chat',
@@ -56,7 +68,8 @@ export default {
       createdAt: '',
       message: '',
       messages: [],
-      room: ''
+      room: '',
+      isActive: false
     }
   },
   async created() {
@@ -82,6 +95,9 @@ export default {
     })
     this.socket.on('message', msg => {
       this.messages.push(msg)
+      if (msg.username !== this.username) {
+        notify(msg.username, msg.text)
+      }
     })
 
     this.socket.on('roomData', ({ users }) => {
@@ -117,6 +133,10 @@ export default {
   color: var(--white);
   background: var(--bg-color);
   width: 225px;
+}
+
+header {
+  display: none;
 }
 
 /* Chat styles */
@@ -272,12 +292,71 @@ export default {
   background-color: var(--dark);
 }
 
-@media screen and (max-width: 425px) {
+@media screen and (max-width: 500px) {
+  .chat {
+    flex-direction: column;
+  }
   .chat__sidebar {
-    display: none;
+    position: absolute;
+    z-index: 2;
+    width: 70%;
+    opacity: 0;
   }
   .chat__main {
     height: 100vh;
+  }
+  header {
+    display: block;
+    position: fixed;
+    width: 100%;
+  }
+  header nav {
+    background-color: var(--bg-color);
+    padding: 2px 16px;
+    box-shadow: 1px 3px 15px rgba(0, 0, 0, 0.4);
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header nav h4 {
+    letter-spacing: 1px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    text-align: right;
+    order: 2;
+  }
+  .show {
+    opacity: 1;
+  }
+  .sidebar-mobile {
+    position: relative;
+  }
+  .users {
+    opacity: 0;
+    position: absolute;
+    display: block;
+    z-index: 2;
+    color: var(--white);
+    top: 40px;
+    width: 300px;
+    border-radius: 15px;
+  }
+  .sidebar-mobile .toggle__sidebar {
+    font-size: 1rem;
+    background-color: var(--dark-2);
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 6px 18px;
+    border: none;
+    cursor: pointer;
+  }
+
+  .compose form {
+    margin-right: 0;
+  }
+  #messages {
+    margin-top: 60px;
   }
 }
 </style>

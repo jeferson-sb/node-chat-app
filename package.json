@@ -8,7 +8,7 @@
     "build": "npm run build --prefix client",
     "server": "nodemon src/index.js",
     "client": "npm run serve --prefix client",
-    "heroku-postbuild": "npm i --prefix client && npm run build",
+    "heroku-postbuild": "npm i --prefix client && npx vue-cli-service build --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\" "
   },
   "keywords": [],

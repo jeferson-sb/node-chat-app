@@ -8,7 +8,7 @@ module.exports = {
       '/socket': {
         target:
           process.env.NODE_ENV === 'production'
-            ? 'https://serene-hamlet-35525.herokuapp.com/'
+            ? 'https://nameless-dusk-95932.herokuapp.com/'
             : 'http://localhost:5000/'
       }
     }

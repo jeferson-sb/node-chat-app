@@ -2,7 +2,7 @@
 
 > Inspired by Discord, Chat me is chat app lightweight, PWA-ready, chat app built with Express, Socket.io & Vue.js
 
-### Demo : [https://serene-hamlet-35525.herokuapp.com/](https://serene-hamlet-35525.herokuapp.com/)
+### Demo : [https://nameless-dusk-95932.herokuapp.com/](https://nameless-dusk-95932.herokuapp.com/)
 
 ## Quick Start
 

@@ -1,6 +1,6 @@
 {
   "name": "ChatMe",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Chat app built with Express & Socket.io",
   "main": "index.js",
   "scripts": {

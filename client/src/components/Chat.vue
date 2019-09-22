@@ -77,7 +77,7 @@ export default {
     this.username = username
     this.room = room
     if (process.env.NODE_ENV === 'production') {
-      this.socket = io('https://nameless-dusk-95932.herokuapp.com/')
+      this.socket = io('https://whispering-reaches-62773.herokuapp.com/')
     } else {
       this.socket = io('http://localhost:5000/')
     }

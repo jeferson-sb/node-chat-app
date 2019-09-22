@@ -4,7 +4,7 @@
       <nav>
         <h4>ChatMe</h4>
         <div class="sidebar-mobile">
-          <button class="toggle__sidebar" @click="isActive = true">{{room}}</button>
+          <button class="toggle__sidebar" @click="isActive = !isActive">{{room}}</button>
           <ul :class="['users', isActive ? 'show' : '']">
             <li v-for="user in users" :key="user.id">{{ user.username }}</li>
           </ul>
@@ -125,14 +125,15 @@ export default {
 
 <style scoped>
 .chat {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20% auto;
+  grid-template-rows: 1fr;
 }
 
 .chat__sidebar {
   height: 100vh;
   color: var(--white);
   background: var(--bg-color);
-  width: 225px;
 }
 
 header {
@@ -294,20 +295,29 @@ header {
 
 @media screen and (max-width: 500px) {
   .chat {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
   .chat__sidebar {
-    position: absolute;
-    z-index: 2;
-    width: 70%;
-    opacity: 0;
+    display: none;
   }
   .chat__main {
     height: 100vh;
   }
+  .chat__messages {
+    flex-grow: 0.8;
+    padding-bottom: 0;
+    margin-bottom: 180px;
+  }
+  .compose {
+    margin-right: 0;
+    position: absolute;
+    bottom: 4px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   header {
     display: block;
-    position: fixed;
     width: 100%;
   }
   header nav {
@@ -327,7 +337,7 @@ header {
     order: 2;
   }
   .show {
-    opacity: 1;
+    opacity: 1 !important;
   }
   .sidebar-mobile {
     position: relative;
@@ -340,7 +350,15 @@ header {
     color: var(--white);
     top: 40px;
     width: 300px;
-    border-radius: 15px;
+  }
+
+  .users::after {
+    content: '';
+    top: -15px;
+    left: 0;
+    border: 15px solid;
+    border-color: transparent transparent transparent var(--dark);
+    position: absolute;
   }
   .sidebar-mobile .toggle__sidebar {
     font-size: 1rem;
@@ -354,9 +372,6 @@ header {
 
   .compose form {
     margin-right: 0;
-  }
-  #messages {
-    margin-top: 60px;
   }
 }
 </style>

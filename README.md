@@ -7,6 +7,10 @@
 ## Quick Start
 
 ```
+$ git clone https://github.com/jeferson-sb/node-chat-app.git && cd node-chat-app
+```
+
+```
 $ npm install
 ```
 

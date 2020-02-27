@@ -1,9 +1,9 @@
 const moment = require('moment');
-const uuidv1 = require('uuid/v1');
+const { v4: uuidv4 } = require('uuid');
 
 const generateMessage = (username, text) => {
   return {
-    id: uuidv1(),
+    id: uuidv4(),
     username,
     text,
     createdAt: moment().valueOf()

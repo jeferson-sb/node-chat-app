@@ -4,7 +4,9 @@
       <nav>
         <h4>ChatMe</h4>
         <div class="sidebar-mobile">
-          <button class="toggle__sidebar" @click="isActive = !isActive">{{room}}</button>
+          <button class="toggle__sidebar" @click="isActive = !isActive">
+            {{ room }}
+          </button>
           <ul :class="['users', isActive ? 'show' : '']">
             <li v-for="user in users" :key="user.id">{{ user.username }}</li>
           </ul>
@@ -12,28 +14,35 @@
       </nav>
     </header>
     <aside id="sidebar" class="chat__sidebar">
-      <h2 class="room-title">{{room}}</h2>
+      <h2 class="room-title">{{ room }}</h2>
       <h3 class="list-title">Users</h3>
       <ul class="users">
         <li v-for="user in users" :key="user.id">{{ user.username }}</li>
       </ul>
     </aside>
     <div class="chat__main">
-      <div id="messages" class="chat__messages" v-chat-scroll="{always: false, smooth: true}">
+      <div
+        id="messages"
+        class="chat__messages"
+        v-chat-scroll="{ always: false, smooth: true }"
+      >
         <div
           v-for="message in messages"
           :key="message.id"
-          :class="['message', message.username === username ? 'message--sent' : '']"
+          :class="[
+            'message',
+            message.username === username ? 'message--sent' : ''
+          ]"
         >
           <p>
             <span
               class="message__name"
               v-show="message.username !== username"
-            >{{ message.username }}</span>
-            <time
-              class="message__meta"
-              datetime="message.createdAt"
-            >{{ message.createdAt | formatDatetime }}</time>
+              >{{ message.username }}</span
+            >
+            <time class="message__meta" datetime="message.createdAt">{{
+              message.createdAt | formatDatetime
+            }}</time>
           </p>
           <p>{{ message.text }}</p>
         </div>
@@ -47,6 +56,7 @@
             placeholder="Type your message ..."
             required
             autocomplete="off"
+            ref="name"
           />
           <button type="submit">Send</button>
         </form>
@@ -112,6 +122,7 @@ export default {
         }
         this.message = ''
       })
+      this.$refs.name.focus()
     }
   },
   filters: {

@@ -11,7 +11,7 @@ const {
   addUser,
   removeUser,
   getUser,
-  getUsersInRoom
+  getUsersInRoom,
 } = require('./utils/users');
 
 const port = process.env.PORT || 8000;
@@ -23,7 +23,6 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../public')));
-  app.get(/.*/, (req, res) => res.sendFile(__dirname + '../public/index.html'));
 }
 
 // const publicVapidKey = process.env.PUBLIC_VAPID_KEY;
@@ -34,7 +33,7 @@ if (process.env.NODE_ENV === 'development') {
 //   privateVapidKey
 // );
 
-io.on('connection', socket => {
+io.on('connection', (socket) => {
   console.log('New WebSocket connected!');
 
   // Listen for a join event from the client
@@ -59,7 +58,7 @@ io.on('connection', socket => {
 
     io.to(user.room).emit('roomData', {
       room: user.room,
-      users: getUsersInRoom(user.room)
+      users: getUsersInRoom(user.room),
     });
     callback();
   });
@@ -80,14 +79,14 @@ io.on('connection', socket => {
       );
       io.to(user.room).emit('roomData', {
         room: user.room,
-        users: getUsersInRoom(user.room)
+        users: getUsersInRoom(user.room),
       });
     }
   });
 });
 
 app.use((req, res, next) => {
-  res.redirect('/');
+  return res.sendFile(__dirname + '../public/index.html');
 });
 
 server.listen(

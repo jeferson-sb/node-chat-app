@@ -13,7 +13,7 @@ const notify = (user, message) => {
       process(permission, user, message)
     })
   } else {
-    throw new Error('Your browser does not support notifications')
+    console.warn('Please enable notifications')
   }
 }
 

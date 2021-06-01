@@ -15,7 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "concurrently": "^6.0.2",
-    "dotenv": "^8.2.0",
+    "dotenv": "^10.0.0",
     "express": "^4.17.1",
     "moment": "^2.29.1",
     "morgan": "^1.10.0",

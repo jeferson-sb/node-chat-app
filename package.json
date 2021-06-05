@@ -1,31 +1,40 @@
 {
-  "name": "ChatMe",
-  "version": "1.0.2",
+  "name": "chatme",
+  "version": "1.0.0",
   "description": "Chat app built with Express & Socket.io",
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
+    "concurrently": "concurrently \"npm run server\" \"npm run client\" ",
+    "dev:server": "nodemon src/presentation/server.js",
+    "dev:client": "npm run serve --prefix client",
     "build:client": "npm run build --prefix client",
-    "server": "nodemon src/index.js",
-    "client": "npm run serve --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\" "
+    "lint": "eslint . --ext .js",
+    "prettier": "prettier --write \"**/*.{js,json}\""
   },
   "keywords": [],
   "author": "Jeferson S. Brito",
-  "license": "ISC",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.16"
+  },
   "dependencies": {
-    "concurrently": "^6.0.2",
-    "dotenv": "^8.2.0",
+    "concurrently": "^6.2.0",
+    "dotenv": "^10.0.0",
     "express": "^4.17.1",
-    "moment": "^2.29.1",
     "morgan": "^1.10.0",
-    "socket.io": "^2.4.0",
+    "socket.io": "^4.1.2",
     "uuid": "^8.3.2",
     "web-push": "^3.4.4"
   },
   "devDependencies": {
-    "eslint": "^6.8.0",
-    "jest": "^26.6.1",
-    "nodemon": "^2.0.7"
+    "eslint": "^7.27.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-import": "^2.23.4",
+    "eslint-plugin-prettier": "^3.4.0",
+    "jest": "^27.0.4",
+    "nodemon": "^2.0.7",
+    "prettier": "^2.3.0"
   }
 }

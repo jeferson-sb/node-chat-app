@@ -35,6 +35,6 @@
     "eslint-plugin-prettier": "^3.4.0",
     "jest": "^27.0.6",
     "nodemon": "^2.0.7",
-    "prettier": "^2.3.2"
+    "prettier": "^2.4.1"
   }
 }

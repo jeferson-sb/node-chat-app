@@ -5,3 +5,5 @@ npm-debug.log*
 .npm
 .env
 public
+# Local Netlify folder
+.netlify

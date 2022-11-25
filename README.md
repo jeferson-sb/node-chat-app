@@ -13,7 +13,7 @@ Lightweight chat app built with Express, Socket.io and Vue.js
 
 ## 💻 Demo
 
-[https://whispering-reaches-62773.herokuapp.com/](https://whispering-reaches-62773.herokuapp.com/)
+[Click here](https://chatme-app.netlify.app/)
 
 ## 🚀 Quick Start
 

@@ -1,7 +1,6 @@
 import express from 'express';
 import morgan from 'morgan';
 import http from 'http';
-import path from 'path';
 
 import { setupSocketServer } from './websocket.js';
 import config from '../config/index.js';
@@ -29,10 +28,6 @@ socketServer.on('connection', (socket) => {
 
 if (config.mode === 'development') {
   app.use(morgan('dev'));
-}
-
-if (config.mode === 'production') {
-  app.use(express.static(path.resolve(__dirname, '..', 'plubic')));
 }
 
 app.use((err, _req, res, _next) => {

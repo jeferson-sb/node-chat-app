@@ -8,7 +8,7 @@
     "start": "node src/presentation/server.js",
     "concurrently": "concurrently \"npm run dev:server\" \"npm run dev:client\" ",
     "dev:server": "nodemon src/presentation/server.js",
-    "dev:client": "npm run serve --prefix client",
+    "dev:client": "npm run dev --prefix client",
     "build:client": "npm run build --prefix client",
     "lint": "eslint . --ext .js",
     "prettier": "prettier --write \"**/*.{js,json}\""

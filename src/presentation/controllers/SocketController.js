@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
-import { Message } from '../../domain/Message.js' 
-import { eventTypes } from '../../utils/eventTypes.js'
+import { Message } from '../../domain/Message.js';
+import { eventTypes } from '../../utils/eventTypes.js';
 
 export default class SocketController {
   constructor({ socketServer }) {
@@ -40,7 +40,7 @@ export default class SocketController {
 
     socket.join(room);
     socket.emit(eventTypes.message, welcomeMessage.snapshot());
-    socket.broadcast.to(room).emit(eventTypes.message, joinMessage.snapshot());
+    socket.to(room).emit(eventTypes.message, joinMessage.snapshot());
 
     this.socketServer.to(room).emit(eventTypes.roomData, {
       room,
@@ -58,7 +58,7 @@ export default class SocketController {
     });
 
     if (user) {
-      this.socketServer.to(user.room).emit(eventTypes.roomData, msg.snapshot());
+      this.socketServer.to(user.room).emit(eventTypes.message, msg.snapshot());
     }
   }
 
@@ -102,4 +102,3 @@ export default class SocketController {
     return activeUsers || [];
   }
 }
-

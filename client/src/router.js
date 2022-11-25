@@ -9,16 +9,17 @@ Vue.use(Router)
 
 export default new Router({
   mode: 'history',
+  base: import.meta.env.BASE_URL,
   routes: [
     {
       path: '/',
       name: 'join',
-      component: Join
+      component: Join,
     },
     {
       path: '/chat/:username/:room',
       name: 'chat',
-      component: Chat
-    }
-  ]
+      component: Chat,
+    },
+  ],
 })

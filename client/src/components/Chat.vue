@@ -31,7 +31,7 @@
           :key="message.id"
           :class="[
             'message',
-            message.username === username ? 'message--sent' : ''
+            message.username === username ? 'message--sent' : '',
           ]"
         >
           <p>
@@ -79,58 +79,47 @@ export default {
       message: '',
       messages: [],
       room: '',
-      isActive: false
+      isActive: false,
     }
   },
   async created() {
     const { username, room } = this.$route.params
     this.username = username
     this.room = room
-    if (process.env.NODE_ENV === 'production') {
-      this.socket = io('https://whispering-reaches-62773.herokuapp.com/')
-    } else {
-      this.socket = io('http://localhost:5000/')
-    }
+    this.socket = io(import.meta.env.VITE_SOCKET_URL)
   },
   mounted() {
     const user = {
       username: this.username,
-      room: this.room
+      room: this.room,
     }
 
-    this.socket.emit('join', user, error => {
-      if (error) {
-        throw new Error(error)
-      }
-    })
-    this.socket.on('message', msg => {
+    this.socket.emit('join', user)
+    this.socket.on('message', (msg) => {
       this.messages.push(msg)
       if (msg.username !== this.username) {
         notify(msg.username, msg.text)
       }
     })
 
-    this.socket.on('roomData', ({ users }) => {
-      this.users = users
+    this.socket.on('roomData', (data) => {
+      this.users = data.users
     })
   },
   methods: {
     sendMessage() {
-      this.socket.emit('sendMessage', this.message, error => {
-        if (error) {
-          throw new Error(error)
-        }
-        this.message = ''
-      })
+      const body = { username: this.username, message: this.message }
+      this.socket.emit('sendMessage', body)
+      this.message = ''
       this.$refs.name.focus()
-    }
+    },
   },
   filters: {
     formatDatetime(value) {
       const createdAt = new Date(value)
       return createdAt.toLocaleString()
-    }
-  }
+    },
+  },
 }
 </script>
 

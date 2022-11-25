@@ -1,6 +1,6 @@
-const { Server: WebSocketServer } = require('socket.io');
+import { Server as WebSocketServer } from 'socket.io';
 
-function setupSocketServer(server) {
+export function setupSocketServer(server) {
   const io = new WebSocketServer(server, {
     cors: {
       origin: '*',
@@ -9,5 +9,3 @@ function setupSocketServer(server) {
   });
   return io;
 }
-
-module.exports = { setupSocketServer };

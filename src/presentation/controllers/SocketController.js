@@ -1,9 +1,9 @@
-const { v4: uuidv4 } = require('uuid');
+import { v4 as uuidv4 } from 'uuid';
 
-const Message = require('../../domain/Message');
-const { eventTypes } = require('../../utils/eventTypes');
+import { Message } from '../../domain/Message.js' 
+import { eventTypes } from '../../utils/eventTypes.js'
 
-class SocketController {
+export default class SocketController {
   constructor({ socketServer }) {
     this.socketServer = socketServer;
     this.users = new Map();
@@ -13,7 +13,6 @@ class SocketController {
   onJoinRoom(socket, { username, room }) {
     const existingUser = this.users.has(username);
 
-    // put this on a repository in memory?
     if (!username && !room) {
       console.error('Username and room are required');
     }
@@ -104,4 +103,3 @@ class SocketController {
   }
 }
 
-module.exports = SocketController;

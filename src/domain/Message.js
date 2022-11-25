@@ -1,4 +1,4 @@
-class Message {
+export class Message {
   #id;
   #username;
   #text;
@@ -40,5 +40,3 @@ class Message {
     };
   }
 }
-
-module.exports = Message;

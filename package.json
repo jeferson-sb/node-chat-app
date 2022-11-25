@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Chat app built with Express & Socket.io",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/presentation/server.js",
     "concurrently": "concurrently \"npm run dev:server\" \"npm run dev:client\" ",
     "dev:server": "nodemon src/presentation/server.js",
     "dev:client": "npm run serve --prefix client",

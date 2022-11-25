@@ -1,14 +1,14 @@
-const express = require('express');
-const morgan = require('morgan');
-const http = require('http');
-const path = require('path');
+import express from 'express';
+import morgan from 'morgan';
+import http from 'http';
+import path from 'path';
 
-const { setupSocketServer } = require('./websocket');
-const { port, mode } = require('../config');
-const HTTPError = require('../infra/errors/HTTPError');
+import { setupSocketServer } from './websocket.js';
+import config from '../config/index.js';
+import HTTPError from '../infra/errors/HTTPError.js';
 
 // TODO: Extract to use case
-const SocketController = require('./controllers/SocketController');
+import SocketController from './controllers/SocketController.js';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -27,15 +27,15 @@ socketServer.on('connection', (socket) => {
   socket.on('disconnect', () => controller.onDisconnect(socket));
 });
 
-if (mode === 'development') {
+if (config.mode === 'development') {
   app.use(morgan('dev'));
 }
 
-if (mode === 'production') {
+if (config.mode === 'production') {
   app.use(express.static(path.resolve(__dirname, '..', 'plubic')));
 }
 
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   if (err instanceof HTTPError) {
     return res.status(err.statusCode).json({
       status: 'error',
@@ -48,6 +48,6 @@ app.use((err, req, res, next) => {
     .json({ message: 'Internal Server Error', status: 'error' });
 });
 
-httpServer.listen(port, () => {
-  console.log(`⬆️ Server is up and running on port ${port}`);
+httpServer.listen(config.port, () => {
+  console.log(`⬆️ Server is up and running on port ${config.port}`);
 });

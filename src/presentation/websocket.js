@@ -6,6 +6,7 @@ export function setupSocketServer(server) {
     cors: {
       origin: config.mode === 'production' ? config.client : '*',
       methods: ['GET', 'POST'],
+      credentials: true,
     },
   });
   return io;

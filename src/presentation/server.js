@@ -14,6 +14,16 @@ const httpServer = http.createServer(app);
 const socketServer = setupSocketServer(httpServer);
 const controller = new SocketController({ socketServer });
 
+// Add Access Control Allow Origin headers
+app.use((_req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', config.client);
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept',
+  );
+  next();
+});
+
 socketServer.on('connection', (socket) => {
   console.log(`[socket]: new socket connected: ${socket.id}`);
 
@@ -44,5 +54,8 @@ app.use((err, _req, res, _next) => {
 });
 
 httpServer.listen(config.port, () => {
-  console.log(`⬆️ Server is up and running on port ${config.port}`);
+  console.log(
+    `⬆️ Server is up and running on port ${config.port} at ${config.mode} mode`,
+  );
+  console.log(`ServerSocket waiting for ${config.client}`);
 });

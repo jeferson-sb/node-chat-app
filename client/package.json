@@ -24,7 +24,7 @@
     "prettier": "^2.5.1",
     "terser": "^5.14.2",
     "vite": "^3.0.2",
-    "vite-plugin-pwa": "^0.13.3"
+    "vite-plugin-pwa": "^0.21.1"
   },
   "browserslist": [
     "> 1%",

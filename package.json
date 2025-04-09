@@ -26,7 +26,7 @@
     "morgan": "^1.10.0",
     "socket.io": "^4.8.1",
     "uuid": "^9.0.0",
-    "web-push": "^3.5.0"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "eslint": "^8.28.0",

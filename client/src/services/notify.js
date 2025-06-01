@@ -1,7 +1,7 @@
 const process = (permission, user, message) => {
   if (permission === 'granted') {
     let n = new Notification(user, {
-      body: message
+      body: message,
     })
     n.close()
   }
@@ -9,7 +9,7 @@ const process = (permission, user, message) => {
 
 const notify = (user, message) => {
   if (window.Notification && Notification.permission !== 'denied') {
-    Notification.requestPermission(permission => {
+    Notification.requestPermission((permission) => {
       process(permission, user, message)
     })
   } else {

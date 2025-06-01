@@ -77,10 +77,7 @@ export default class SocketController {
         createdAt: Date.now(),
       });
 
-      this.socketServer
-        .to(user.room)
-        .emit(eventTypes.roomData, disconnectMsg.snapshot());
-
+      socket.to(user.room).emit(eventTypes.message, disconnectMsg.snapshot());
       this.socketServer.to(user.room).emit(eventTypes.roomData, {
         room: user.room,
         users: this.getUsersOnRoom(user.room),

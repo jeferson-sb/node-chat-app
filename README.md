@@ -26,7 +26,7 @@ $ git clone https://github.com/jeferson-sb/node-chat-app.git && cd node-chat-app
 ```
 
 ```bash
-$ npm i && cd client && npm i
+$ pnpm i && cd client && pnpm i
 ```
 
 ### Usage

@@ -8,41 +8,37 @@
             {{ room }}
           </button>
           <ul :class="['users', isActive ? 'show' : '']">
-            <li v-for="user in users" :key="user.id">{{ user.username }}</li>
+            <li v-for="user in users" :key="user.id">
+              {{ user.username }}
+            </li>
           </ul>
         </div>
       </nav>
     </header>
     <aside id="sidebar" class="chat__sidebar">
-      <h2 class="room-title">{{ room }}</h2>
-      <h3 class="list-title">Users</h3>
+      <h2 class="room-title">
+        {{ room }}
+      </h2>
+      <h3 class="list-title">
+        Users
+      </h3>
       <ul class="users">
-        <li v-for="user in users" :key="user.id">{{ user.username }}</li>
+        <li v-for="user in users" :key="user.id">
+          {{ user.username }}
+        </li>
       </ul>
     </aside>
     <div class="chat__main">
-      <div
-        id="messages"
-        class="chat__messages"
-        v-chat-scroll="{ always: false, smooth: true }"
-      >
-        <div
-          v-for="message in messages"
-          :key="message.id"
-          :class="[
-            'message',
-            message.username === username ? 'message--sent' : '',
-          ]"
-        >
+      <div id="messages" v-chat-scroll="{ always: false, smooth: true }" class="chat__messages">
+        <div v-for="message in messages" :key="message.id" :class="[
+          'message',
+          message.username === username ? 'message--sent' : '',
+        ]">
           <p>
-            <span
-              class="message__name"
-              v-show="message.username !== username"
-              >{{ message.username }}</span
-            >
+            <span v-show="message.username !== username" class="message__name">{{ message.username }}</span>
             <time class="message__meta" datetime="message.createdAt">{{
               message.createdAt | formatDatetime
-            }}</time>
+              }}</time>
           </p>
           <p>{{ message.text }}</p>
         </div>
@@ -50,15 +46,11 @@
 
       <div class="compose">
         <form id="message-form" @submit.prevent="sendMessage">
-          <input
-            name="message"
-            v-model="message"
-            placeholder="Type your message ..."
-            required
-            autocomplete="off"
-            ref="name"
-          />
-          <button type="submit">Send</button>
+          <textarea ref="name" v-model="message" name="message" placeholder="Type your message ..." required
+            autocomplete="off" autocorrect="off" autocapitalize="off" @keyup.enter="sendMessage" />
+          <button type="submit">
+            Send
+          </button>
         </form>
       </div>
     </div>
@@ -71,6 +63,12 @@ import notify from '../services/notify'
 
 export default {
   name: 'Chat',
+  filters: {
+    formatDatetime(value) {
+      const createdAt = new Date(value)
+      return createdAt.toLocaleString()
+    },
+  },
   data() {
     return {
       users: {},
@@ -107,18 +105,13 @@ export default {
     })
   },
   methods: {
-    sendMessage() {
+    sendMessage(e) {
+      if (e.shiftKey) return;
       const body = { username: this.username, message: this.message }
       this.socket.emit('sendMessage', body)
       this.message = ''
       this.$refs.name.focus()
-    },
-  },
-  filters: {
-    formatDatetime(value) {
-      const createdAt = new Date(value)
-      return createdAt.toLocaleString()
-    },
+    }
   },
 }
 </script>
@@ -192,13 +185,13 @@ header {
   position: absolute;
 }
 
-.message > p:first-child {
+.message>p:first-child {
   display: flex;
   justify-content: space-between;
   margin-bottom: 0;
 }
 
-.message > p:last-child {
+.message>p:last-child {
   margin-top: 0;
   color: rgb(247, 247, 247);
 }
@@ -236,7 +229,7 @@ header {
   margin-right: 16px;
 }
 
-.compose input {
+.compose textarea {
   border: 1px solid var(--bg-color);
   width: 100%;
   padding: 12px;
@@ -245,8 +238,10 @@ header {
   border-radius: 15px 0 0 15px;
   box-sizing: border-box;
   color: var(--white);
+  resize: none;
 }
-.compose input:focus {
+
+.compose textarea:focus {
   border-color: var(--purple);
 }
 
@@ -288,6 +283,7 @@ header {
   font-weight: 300;
   padding-left: 0;
 }
+
 .users li {
   padding: 12px 12px 12px 25px;
   background-color: var(--dark);
@@ -297,17 +293,21 @@ header {
   .chat {
     grid-template-columns: 1fr;
   }
+
   .chat__sidebar {
     display: none;
   }
+
   .chat__main {
     height: 100vh;
   }
+
   .chat__messages {
     flex-grow: 0.8;
     padding-bottom: 0;
     margin-bottom: 180px;
   }
+
   .compose {
     margin-right: 0;
     position: absolute;
@@ -320,6 +320,7 @@ header {
     display: block;
     width: 100%;
   }
+
   header nav {
     background-color: var(--bg-color);
     padding: 2px 16px;
@@ -329,6 +330,7 @@ header {
     justify-content: space-between;
     align-items: center;
   }
+
   header nav h4 {
     letter-spacing: 1px;
     font-weight: 800;
@@ -336,12 +338,15 @@ header {
     text-align: right;
     order: 2;
   }
+
   .show {
     opacity: 1 !important;
   }
+
   .sidebar-mobile {
     position: relative;
   }
+
   .users {
     opacity: 0;
     position: absolute;
@@ -360,6 +365,7 @@ header {
     border-color: transparent transparent transparent var(--dark);
     position: absolute;
   }
+
   .sidebar-mobile .toggle__sidebar {
     font-size: 1rem;
     background-color: var(--dark-2);

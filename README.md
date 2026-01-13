@@ -15,6 +15,9 @@ Lightweight chat app built with Express, Socket.io and Vue.js
 
 [Click here](https://chatme-app.netlify.app/)
 
+> [!WARNING]
+> Be aware that messages sent on any room are NOT persisted.
+
 ## 🚀 Quick Start
 
 > Before running the following commands, please rename `.env.example` to `.env`
@@ -22,17 +25,17 @@ Lightweight chat app built with Express, Socket.io and Vue.js
 ### Installation
 
 ```bash
-$ git clone https://github.com/jeferson-sb/node-chat-app.git && cd node-chat-app
+git clone https://github.com/jeferson-sb/node-chat-app.git && cd node-chat-app
 ```
 
 ```bash
-$ pnpm i && cd client && pnpm i
+pnpm i && cd client && pnpm i
 ```
 
 ### Usage
 
 ```bash
-$ cd .. && npm run dev
+cd .. && npm run concurrently
 ```
 
 ## 📝License

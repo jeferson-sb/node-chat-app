@@ -44,10 +44,16 @@ its own branch/PR with atomic, revertable commits, in this order:
    type-checking via `vue-tsc` is deferred to step 4, since `vue-tsc`
    depends on Vue 3's `@vue/compiler-dom` and isn't reliably compatible with
    Vue 2.7 — plain `tsc --noEmit` covers the `.ts` files in the meantime.
-4. **Vue 2 → Vue 3.7+** — migrate `apps/client` from Vue 2.7/vue-router 3 to
-   Vue 3.7+/vue-router 4, replacing `@vitejs/plugin-vue2` with
-   `@vitejs/plugin-vue`, and re-evaluating `vue-chat-scroll` (Vue 2-only) for
-   a Vue 3-compatible replacement or a small composable.
+4. **Vue 2 → Vue 3** — migrate `apps/client` from Vue 2.7/vue-router 3 to
+   Vue 3.5.41/vue-router 4.6.4, replacing `@vitejs/plugin-vue2` with
+   `@vitejs/plugin-vue`, dropping `@vitejs/plugin-legacy` (Vue 3 requires
+   `Proxy`, so IE11 support was already dead once Vue 3 landed), and
+   replacing `vue-chat-scroll` with a small custom auto-scroll composable.
+   `docs/MODERNIZE.md` calls for "Vue 3.7+", but Vue has never shipped a 3.7
+   — 3.5.41 is the latest stable release (3.6.0 is an RC at the time of this
+   migration), so that's the version actually installed. vue-router 4.6.4 is
+   used over the newer 5.x major for maturity/adoption, since 5.x shipped
+   alongside Vue's 3.6 pre-releases.
 5. **Tooling swap** — replace eslint + prettier with oxlint + oxformat across
    the workspace, removing the old configs.
 6. **Testing** — introduce Vitest (unit, server + client) and Playwright
@@ -72,10 +78,10 @@ characterization tests against.
 - Until step 6 lands, there is no automated regression coverage, so manual
   verification of the chat flow (join, send, receive, disconnect, push
   notifications) is required after each PR.
-- `vue-chat-scroll` has no Vue 3 support; step 4 will need a replacement
-  decision (small custom composable vs. a maintained alternative) captured
-  as its own follow-up ADR or noted inline in that PR if the choice is
-  non-trivial.
+- `vue-chat-scroll` has no Vue 3 support and is unmaintained; step 4 replaces
+  it with a small custom composable rather than searching for another
+  third-party auto-scroll library, per AGENTS.md's preference for small
+  custom hooks over broad dependencies.
 - Docker/Fly.io deploy config must be updated in step 2 (Node 24) and
   potentially again in step 1 if build paths change (`apps/server` vs
   `src/`).

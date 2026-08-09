@@ -21,6 +21,16 @@
     },
     "typecheck": {
       "outputs": []
+    },
+    "test": {
+      "outputs": ["coverage/**"]
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "outputs": ["coverage/**"]
     }
   }
 }

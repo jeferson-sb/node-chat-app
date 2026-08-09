@@ -14,9 +14,13 @@
     "fmt": "turbo run fmt",
     "fmt:check": "turbo run fmt:check",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "test:e2e": "playwright test",
     "start": "pnpm --filter @chatme/server start"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "taze": "^19.9.2",

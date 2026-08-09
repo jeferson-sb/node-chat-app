@@ -1,13 +1,16 @@
-import express from 'express';
+import http from 'node:http';
+import express, { type ErrorRequestHandler } from 'express';
 import morgan from 'morgan';
-import http from 'http';
 
-import { setupSocketServer } from './websocket.js';
-import config from '../config/index.js';
-import HTTPError from '../infra/errors/HTTPError.js';
+import { setupSocketServer } from './websocket.ts';
+import config from '../config/index.ts';
+import HTTPError from '../infra/errors/HTTPError.ts';
 
 // TODO: Extract to use case
-import SocketController from './controllers/SocketController.js';
+import SocketController, {
+  type JoinRoomPayload,
+  type SendMessagePayload,
+} from './controllers/SocketController.ts';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -28,11 +31,13 @@ socketServer.on('connection', (socket) => {
   console.log(`[socket]: new socket connected: ${socket.id}`);
 
   // Listen to socket events
-  socket.on('join', (data) => {
+  socket.on('join', (data: JoinRoomPayload) => {
     controller.onJoinRoom(socket, data);
   });
   socket.on('error', () => controller.onConnectionError(socket));
-  socket.on('sendMessage', (data) => controller.onSendMessage(socket, data));
+  socket.on('sendMessage', (data: SendMessagePayload) =>
+    controller.onSendMessage(socket, data),
+  );
   socket.on('disconnect', () => controller.onDisconnect(socket));
 });
 
@@ -40,18 +45,19 @@ if (config.mode === 'development') {
   app.use(morgan('dev'));
 }
 
-app.use((err, _req, res, _next) => {
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof HTTPError) {
-    return res.status(err.statusCode).json({
+    res.status(err.statusCode).json({
       status: 'error',
       message: err.message,
     });
+    return;
   }
 
-  return res
-    .status(500)
-    .json({ message: 'Internal Server Error', status: 'error' });
-});
+  res.status(500).json({ message: 'Internal Server Error', status: 'error' });
+};
+
+app.use(errorHandler);
 
 httpServer.listen(config.port, () => {
   console.log(

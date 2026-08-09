@@ -1,16 +1,41 @@
+import type { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
-import { Message } from '../../domain/Message.js';
-import { eventTypes } from '../../utils/eventTypes.js';
+import { Message } from '../../domain/Message.ts';
+import { eventTypes } from '../../utils/eventTypes.ts';
+
+export type ChatUser = {
+  username: string;
+  room: string;
+  socketId: string;
+};
+
+export type JoinRoomPayload = {
+  username: string;
+  room: string;
+};
+
+export type SendMessagePayload = {
+  username: string;
+  message: string;
+};
+
+export type SocketControllerDeps = {
+  socketServer: Server;
+};
 
 export default class SocketController {
-  constructor({ socketServer }) {
+  private readonly socketServer: Server;
+  private readonly users: Map<string, ChatUser>;
+  private readonly rooms: Set<string>;
+
+  constructor({ socketServer }: SocketControllerDeps) {
     this.socketServer = socketServer;
     this.users = new Map();
     this.rooms = new Set();
   }
 
-  onJoinRoom(socket, { username, room }) {
+  onJoinRoom(socket: Socket, { username, room }: JoinRoomPayload): void {
     const existingUser = this.users.has(username);
 
     if (!username && !room) {
@@ -48,7 +73,7 @@ export default class SocketController {
     });
   }
 
-  onSendMessage(socket, { username, message }) {
+  onSendMessage(socket: Socket, { username, message }: SendMessagePayload): void {
     const user = this.users.get(username);
     const msg = Message.from({
       id: uuidv4(),
@@ -62,7 +87,7 @@ export default class SocketController {
     }
   }
 
-  onDisconnect(socket) {
+  onDisconnect(socket: Socket): void {
     const user = [...this.users.values()].find(
       ({ socketId }) => socketId === socket.id,
     );
@@ -87,15 +112,11 @@ export default class SocketController {
     console.log(`[socket]: disconnected: ${socket.id}`);
   }
 
-  onConnectionError(id) {
+  onConnectionError(id: unknown): void {
     console.error(id);
   }
 
-  getUsersOnRoom(room) {
-    const activeUsers = [...this.users.values()].filter(
-      ({ room: r }) => r === room,
-    );
-
-    return activeUsers || [];
+  getUsersOnRoom(room: string): ChatUser[] {
+    return [...this.users.values()].filter(({ room: r }) => r === room);
   }
 }

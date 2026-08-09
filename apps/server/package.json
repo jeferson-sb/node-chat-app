@@ -2,13 +2,14 @@
   "name": "@chatme/server",
   "version": "1.0.0",
   "description": "Chat app server built with Express & Socket.io",
-  "main": "src/presentation/server.js",
+  "main": "src/presentation/server.ts",
   "type": "module",
   "scripts": {
-    "start": "node src/presentation/server.js",
-    "dev": "node --watch src/presentation/server.js",
-    "lint": "eslint . --ext .js",
-    "prettier": "prettier --write \"**/*.{js,json}\""
+    "start": "node src/presentation/server.ts",
+    "dev": "node --watch src/presentation/server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "prettier": "prettier --write \"**/*.{ts,json}\""
   },
   "author": "Jeferson S. Brito",
   "license": "MIT",
@@ -25,12 +26,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^26.2.0",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.3.0",
     "jest": "^29.7.0",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "typescript": "^7.0.2"
   }
 }

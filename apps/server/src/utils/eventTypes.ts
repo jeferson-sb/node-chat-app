@@ -3,4 +3,6 @@ export const eventTypes = {
   message: 'message',
   error: 'error',
   roomData: 'roomData',
-};
+} as const;
+
+export type EventType = (typeof eventTypes)[keyof typeof eventTypes];

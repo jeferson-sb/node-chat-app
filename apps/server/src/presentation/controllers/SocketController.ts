@@ -73,7 +73,10 @@ export default class SocketController {
     });
   }
 
-  onSendMessage(socket: Socket, { username, message }: SendMessagePayload): void {
+  onSendMessage(
+    socket: Socket,
+    { username, message }: SendMessagePayload,
+  ): void {
     const user = this.users.get(username);
     const msg = Message.from({
       id: uuidv4(),

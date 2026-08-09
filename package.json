@@ -1,25 +1,29 @@
 {
   "name": "chatme",
   "version": "1.0.0",
-  "description": "Chat app built with Express, Socket.io and Vue",
   "private": true,
+  "description": "Chat app built with Express, Socket.io and Vue",
+  "keywords": [],
+  "license": "MIT",
+  "author": "Jeferson S. Brito",
   "type": "module",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
+    "fmt": "turbo run fmt",
+    "fmt:check": "turbo run fmt:check",
     "typecheck": "turbo run typecheck",
     "start": "pnpm --filter @chatme/server start"
   },
-  "keywords": [],
-  "author": "Jeferson S. Brito",
-  "license": "MIT",
-  "engines": {
-    "node": ">=24"
-  },
   "devDependencies": {
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
     "taze": "^19.9.2",
     "turbo": "^2.3.0"
+  },
+  "engines": {
+    "node": ">=24"
   },
   "packageManager": "pnpm@9.13.2"
 }

@@ -19,9 +19,7 @@
       <h2 class="room-title">
         {{ room }}
       </h2>
-      <h3 class="list-title">
-        Users
-      </h3>
+      <h3 class="list-title">Users</h3>
       <ul class="users">
         <li v-for="user in users" :key="user.socketId">
           {{ user.username }}
@@ -30,15 +28,23 @@
     </aside>
     <div class="chat__main">
       <div id="messages" ref="messagesContainer" class="chat__messages">
-        <div v-for="message in messages" :key="message.id" :class="[
-          'message',
-          message.username === username ? 'message--sent' : '',
-        ]">
+        <div
+          v-for="message in messages"
+          :key="message.id"
+          :class="[
+            'message',
+            message.username === username ? 'message--sent' : '',
+          ]"
+        >
           <p>
-            <span v-show="message.username !== username" class="message__name">{{ message.username }}</span>
+            <span
+              v-show="message.username !== username"
+              class="message__name"
+              >{{ message.username }}</span
+            >
             <time class="message__meta" :datetime="String(message.createdAt)">{{
               formatDatetime(message.createdAt)
-              }}</time>
+            }}</time>
           </p>
           <p>{{ message.text }}</p>
         </div>
@@ -46,11 +52,18 @@
 
       <div class="compose">
         <form id="message-form" @submit.prevent="sendMessage">
-          <textarea ref="messageInput" v-model="message" name="message" placeholder="Type your message ..." required
-            autocomplete="off" autocorrect="off" autocapitalize="off" @keyup.enter="sendMessage" />
-          <button type="submit">
-            Send
-          </button>
+          <textarea
+            ref="messageInput"
+            v-model="message"
+            name="message"
+            placeholder="Type your message ..."
+            required
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            @keyup.enter="sendMessage"
+          />
+          <button type="submit">Send</button>
         </form>
       </div>
     </div>
@@ -86,7 +99,8 @@ defineOptions({
   name: 'Chat',
 })
 
-const formatDatetime = (value: number): string => new Date(value).toLocaleString()
+const formatDatetime = (value: number): string =>
+  new Date(value).toLocaleString()
 
 const route = useRoute()
 
@@ -127,7 +141,10 @@ onBeforeUnmount(() => {
 const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
   if (e instanceof KeyboardEvent && e.shiftKey) return
 
-  socket.emit('sendMessage', { username: username.value, message: message.value })
+  socket.emit('sendMessage', {
+    username: username.value,
+    message: message.value,
+  })
   message.value = ''
   messageInput.value?.focus()
 }
@@ -202,13 +219,13 @@ header {
   position: absolute;
 }
 
-.message>p:first-child {
+.message > p:first-child {
   display: flex;
   justify-content: space-between;
   margin-bottom: 0;
 }
 
-.message>p:last-child {
+.message > p:last-child {
   margin-top: 0;
   color: rgb(247, 247, 247);
 }

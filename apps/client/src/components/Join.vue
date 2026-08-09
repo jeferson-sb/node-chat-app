@@ -4,7 +4,13 @@
       <h1 class="u-text-center">Join</h1>
       <form @submit.prevent="joinChat">
         <label>Nickname</label>
-        <input type="text" name="username" v-model="username" placeholder="Your nickname" required />
+        <input
+          type="text"
+          name="username"
+          v-model="username"
+          placeholder="Your nickname"
+          required
+        />
         <label>Room</label>
         <input
           type="text"
@@ -44,7 +50,9 @@ const joinChat = (): void => {
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 0 0 1px rgba(32, 34, 37, 0.6), 0 2px 10px 0 rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(32, 34, 37, 0.6),
+    0 2px 10px 0 rgba(0, 0, 0, 0.2);
 }
 
 .centered-form__box {

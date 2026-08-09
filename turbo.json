@@ -12,6 +12,13 @@
     "lint": {
       "outputs": []
     },
+    "fmt": {
+      "cache": false,
+      "outputs": []
+    },
+    "fmt:check": {
+      "outputs": []
+    },
     "typecheck": {
       "outputs": []
     }

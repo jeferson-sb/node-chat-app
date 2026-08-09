@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "semi": true,
+  "overrides": [
+    {
+      "files": ["apps/client/**"],
+      "options": {
+        "semi": false
+      }
+    }
+  ]
+}

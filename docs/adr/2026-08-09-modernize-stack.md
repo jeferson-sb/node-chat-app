@@ -54,8 +54,11 @@ its own branch/PR with atomic, revertable commits, in this order:
    migration), so that's the version actually installed. vue-router 4.6.4 is
    used over the newer 5.x major for maturity/adoption, since 5.x shipped
    alongside Vue's 3.6 pre-releases.
-5. **Tooling swap** — replace eslint + prettier with oxlint + oxformat across
-   the workspace, removing the old configs.
+ 5. **Tooling swap** — replace eslint + prettier with oxlint + oxfmt across
+    the workspace, removing the old configs. `docs/MODERNIZE.md` calls this
+    tool "oxformat", but the actual package published by the Oxc project is
+    named `oxfmt` — that's what's installed.
+
 6. **Testing** — introduce Vitest (unit, server + client) and Playwright
    (e2e) with an initial set of characterization tests covering the current
    chat flow (join, send/receive messages, disconnect) before/alongside
@@ -82,6 +85,15 @@ characterization tests against.
   it with a small custom composable rather than searching for another
   third-party auto-scroll library, per AGENTS.md's preference for small
   custom hooks over broad dependencies.
+- `oxlint`/`oxfmt` are installed once at the workspace root (shared dev
+  tooling, not runtime deps) and configured via nested config files:
+  `.oxlintrc.json`/`.oxfmtrc.json` at the root apply to `apps/server`, and
+  `apps/client/.oxlintrc.json` extends the root config to additionally
+  enable the `vue` plugin for `.vue` script-block linting (oxlint has no Vue
+  *template* linting yet, only script blocks). `.oxfmtrc.json` uses a single
+  root config with a `apps/client/**` override for `semi: false`, matching
+  the two packages' prior, divergent Prettier configs (server used
+  semicolons, client didn't).
 - Docker/Fly.io deploy config must be updated in step 2 (Node 24) and
   potentially again in step 1 if build paths change (`apps/server` vs
   `src/`).

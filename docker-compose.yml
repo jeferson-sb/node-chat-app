@@ -26,12 +26,20 @@ services:
       timeout: 3s
       retries: 5
 
-  server1: &server
+  # Only server1 has a `build` block. server2/server3 reuse the same
+  # `chatme-server` image tag it produces — giving all three a `build`
+  # block (e.g. via a YAML anchor including it) makes Compose build and
+  # tag the same image concurrently in three build contexts, which race
+  # on the final `docker tag` and fail with "image ... already exists".
+  # `depends_on: server1: condition: service_started` forces server1's
+  # build+start to finish first, so the image exists by the time
+  # server2/server3 start from it.
+  server1:
     build:
       context: .
       dockerfile: Dockerfile
     image: chatme-server
-    environment:
+    environment: &server-env
       PORT: '8080'
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
@@ -41,10 +49,22 @@ services:
         condition: service_healthy
 
   server2:
-    <<: *server
+    image: chatme-server
+    environment: *server-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      server1:
+        condition: service_started
 
   server3:
-    <<: *server
+    image: chatme-server
+    environment: *server-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      server1:
+        condition: service_started
 
   nginx:
     image: nginx:1.27-alpine

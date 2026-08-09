@@ -49,12 +49,14 @@ Acceptance criteria:
 - [x] Multiple chat servers handling concurrent connections.
 
 See docker-compose.yml (3 @chatme/server replicas behind nginx.conf) and
-docs/adr/2026-08-09-modernize-stack.md ("Task 4 — Horizontal scaling").
-Client connects with `transports: ["websocket"]` only
-(apps/client/src/components/Chat.vue), so plain round-robin is safe
-without sticky sessions. Verify locally with `docker compose up --build`
-(couldn't be run in the sandbox this was implemented in — see the ADR's
-Consequences section).
+docs/adr/2026-08-09-horizontal-scaling.md. Client connects with
+`transports: ["websocket"]` only (apps/client/src/components/Chat.vue),
+so plain round-robin is safe without sticky sessions. Verified manually
+with `docker compose up --build`: two socket.io-client connections
+through Nginx landed on different server replicas and still exchanged
+messages correctly via the Redis adapter — see the ADR's Verification
+section (also caught and fixed a real image-build race in
+docker-compose.yml's original YAML-anchor setup).
 
 ## Task 5 - Authentication
 

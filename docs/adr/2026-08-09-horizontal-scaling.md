@@ -81,11 +81,32 @@ visible by spreading users across processes more aggressively.
   Redis key (e.g. a set of socketIds per `room:<name>`) if room sizes grew
   much larger.
 - No automated test covers the Redis-backed path end-to-end (multiple
-  real server processes + real Redis). `RedisRoomRepository`'s logic was
-  spot-checked against `ioredis-mock` during development (not committed —
-  wouldn't catch real Redis pub/sub or network behavior anyway) and
-  should be verified with `docker compose up --build` before relying on
-  this in production; see docs/TASK_TRACKER.md Task 4.
+  real server processes + real Redis) — still true, but manually
+  verified once (see below); consider a follow-up automated check if
+  this path regresses again.
+
+## Verification
+
+Manually verified with `docker compose up --build` (all 5 containers —
+`redis`, `server1`/`server2`/`server3`, `nginx` — started cleanly) and two
+`socket.io-client` connections through the Nginx LB (`localhost:8080`):
+container logs confirmed the two clients landed on *different* server
+replicas (round-robin doing its job), yet the join notification and a
+chat message both still reached the other client correctly via the Redis
+adapter, and the Redis-backed roster (`chatme:users` hash) reflected both
+joins and was emptied again on disconnect. Also verified `docker compose
+stop server2` (SIGTERM) shuts that replica down cleanly without hanging,
+per the graceful-shutdown handling in `server.ts`.
+
+One real bug was caught and fixed during this verification: the original
+`docker-compose.yml` used a YAML anchor (`server1: &server` /
+`server2: <<: *server`) to share config across the three replicas,
+which merged the `build` block into all three — Compose then built and
+tagged the same `chatme-server` image concurrently from three build
+contexts, racing on the final tag and failing with `image ... already
+exists`. Fixed by giving only `server1` a `build` block and having
+`server2`/`server3` depend on it (`condition: service_started`) and
+reuse the resulting image tag directly.
 
 ## Alternatives considered
 

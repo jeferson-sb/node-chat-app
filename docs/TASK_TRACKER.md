@@ -55,3 +55,17 @@ Client connects with `transports: ["websocket"]` only
 without sticky sessions. Verify locally with `docker compose up --build`
 (couldn't be run in the sandbox this was implemented in — see the ADR's
 Consequences section).
+
+## Task 5 - Authentication
+
+Replace the free-text nickname flow (Join.vue) with real accounts, as a
+prerequisite for Task 2 (chat history needs a stable identity to persist
+against) and to finish Task 1 (session management).
+
+Priority: Medium
+Completed: [ ]
+
+Decision recorded in docs/adr/2026-08-09-authentication.md: Better Auth
+(not Firebase or Auth.js) + PostgreSQL, accounts mandatory (no anonymous
+join). Not yet implemented — sequence with Task 2, likely sharing the
+same Postgres database.

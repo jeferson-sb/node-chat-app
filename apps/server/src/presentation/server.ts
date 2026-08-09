@@ -1,7 +1,7 @@
 import config from '../config/index.ts';
 import { createApp } from './createApp.ts';
 
-const { httpServer } = createApp();
+const { httpServer, close } = createApp();
 
 httpServer.listen(config.port, () => {
   console.log(
@@ -9,3 +9,12 @@ httpServer.listen(config.port, () => {
   );
   console.log(`ServerSocket waiting for ${config.client}`);
 });
+
+const shutdown = async (): Promise<void> => {
+  httpServer.close();
+  await close();
+  process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

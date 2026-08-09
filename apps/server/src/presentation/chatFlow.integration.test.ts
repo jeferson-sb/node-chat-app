@@ -38,8 +38,9 @@ describe('chat flow (integration)', () => {
     baseUrl = `http://localhost:${port}`;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     app.httpServer.close();
+    await app.close();
   });
 
   afterEach(() => {

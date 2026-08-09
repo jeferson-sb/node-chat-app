@@ -118,7 +118,13 @@ useAutoScroll(messagesContainer, messages, { smooth: true })
 let socket: Socket
 
 onMounted(() => {
-  socket = io(import.meta.env.VITE_SOCKET_URL)
+  // Force websocket-only (skip the HTTP long-polling handshake) so the
+  // client keeps a single persistent connection to whichever server the
+  // load balancer picks — sticky sessions are only required for
+  // long-polling's repeated HTTP requests, not a single websocket
+  // connection. See docs/adr/2026-08-09-modernize-stack.md and
+  // docker-compose.yml's round-robin Nginx upstream.
+  socket = io(import.meta.env.VITE_SOCKET_URL, { transports: ['websocket'] })
 
   socket.emit('join', { username: username.value, room: room.value })
 

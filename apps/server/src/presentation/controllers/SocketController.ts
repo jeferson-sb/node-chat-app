@@ -1,14 +1,12 @@
 import type { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
+import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message } from '../../domain/Message.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
+import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 
-export type ChatUser = {
-  username: string;
-  room: string;
-  socketId: string;
-};
+export type { ChatUser };
 
 export type JoinRoomPayload = {
   username: string;
@@ -22,32 +20,32 @@ export type SendMessagePayload = {
 
 export type SocketControllerDeps = {
   socketServer: Server;
+  rooms: RoomRepository;
 };
 
 export default class SocketController {
   private readonly socketServer: Server;
-  private readonly users: Map<string, ChatUser>;
-  private readonly rooms: Set<string>;
+  private readonly rooms: RoomRepository;
 
-  constructor({ socketServer }: SocketControllerDeps) {
+  constructor({ socketServer, rooms }: SocketControllerDeps) {
     this.socketServer = socketServer;
-    this.users = new Map();
-    this.rooms = new Set();
+    this.rooms = rooms;
   }
 
-  onJoinRoom(socket: Socket, { username, room }: JoinRoomPayload): void {
-    const existingUser = this.users.has(username);
-
+  async onJoinRoom(
+    socket: Socket,
+    { username, room }: JoinRoomPayload,
+  ): Promise<void> {
     if (!username && !room) {
       console.error('Username and room are required');
     }
 
+    const existingUser = await this.rooms.findUserByUsername(username);
     if (existingUser) {
       console.error('Username already in use!');
     }
 
-    this.users.set(String(username), { username, room, socketId: socket.id });
-    this.rooms.add(room);
+    await this.rooms.addUser({ username, room, socketId: socket.id });
 
     const welcomeMessage = Message.from({
       id: uuidv4(),
@@ -69,15 +67,15 @@ export default class SocketController {
 
     this.socketServer.to(room).emit(eventTypes.roomData, {
       room,
-      users: this.getUsersOnRoom(room),
+      users: await this.getUsersOnRoom(room),
     });
   }
 
-  onSendMessage(
+  async onSendMessage(
     socket: Socket,
     { username, message }: SendMessagePayload,
-  ): void {
-    const user = this.users.get(username);
+  ): Promise<void> {
+    const user = await this.rooms.findUserByUsername(username);
     const msg = Message.from({
       id: uuidv4(),
       username,
@@ -90,14 +88,10 @@ export default class SocketController {
     }
   }
 
-  onDisconnect(socket: Socket): void {
-    const user = [...this.users.values()].find(
-      ({ socketId }) => socketId === socket.id,
-    );
+  async onDisconnect(socket: Socket): Promise<void> {
+    const user = await this.rooms.removeUser(socket.id);
 
     if (user) {
-      this.users.delete(user.username);
-
       const disconnectMsg = Message.from({
         id: uuidv4(),
         username: 'Server',
@@ -108,7 +102,7 @@ export default class SocketController {
       socket.to(user.room).emit(eventTypes.message, disconnectMsg.snapshot());
       this.socketServer.to(user.room).emit(eventTypes.roomData, {
         room: user.room,
-        users: this.getUsersOnRoom(user.room),
+        users: await this.getUsersOnRoom(user.room),
       });
     }
 
@@ -119,7 +113,7 @@ export default class SocketController {
     console.error(id);
   }
 
-  getUsersOnRoom(room: string): ChatUser[] {
-    return [...this.users.values()].filter(({ room: r }) => r === room);
+  getUsersOnRoom(room: string): Promise<ChatUser[]> {
+    return this.rooms.getUsersInRoom(room);
   }
 }

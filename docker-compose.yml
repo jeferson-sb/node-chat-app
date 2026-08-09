@@ -1,0 +1,58 @@
+name: chatme
+
+# Reference architecture for Task 4 in docs/TASK_TRACKER.md: three
+# @chatme/server instances behind an Nginx load balancer, sharing room
+# state and cross-node broadcast through Redis (RedisRoomRepository +
+# the socket.io Redis adapter — see apps/server/src/presentation/createApp.ts).
+#
+# Usage:
+#   docker compose up --build
+#   pnpm --filter @chatme/client dev -- --port 5300   # in another terminal
+#   VITE_SOCKET_URL=http://localhost:8080 (Nginx), see apps/client/.env.example
+#
+# Verify the load balancer is actually distributing connections, and that
+# users on different nodes can see/message each other, by opening two
+# browser tabs on the same room and checking `docker compose logs -f` for
+# "new socket connected" lines split across server1/server2/server3.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server1: &server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chatme-server
+    environment:
+      PORT: '8080'
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      CLIENT_APP_URL: ${CLIENT_APP_URL:-http://localhost:5300}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  server2:
+    <<: *server
+
+  server3:
+    <<: *server
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - '8080:80'
+    depends_on:
+      - server1
+      - server2
+      - server3

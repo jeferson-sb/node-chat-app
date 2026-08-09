@@ -38,6 +38,19 @@ pnpm install
 pnpm dev
 ```
 
+### Running multiple chat servers behind a load balancer
+
+For horizontal scaling (multiple `@chatme/server` instances sharing room
+state via Redis, behind an Nginx load balancer):
+
+```bash
+docker compose up --build
+```
+
+See `docker-compose.yml`, `nginx.conf`, and
+[`docs/adr/2026-08-09-horizontal-scaling.md`](docs/adr/2026-08-09-horizontal-scaling.md)
+for details.
+
 ## 📝License
 
 This project is licensed under the [MIT License](https://github.com/jeferson-sb/node-chat-app/blob/master/LICENSE.md)

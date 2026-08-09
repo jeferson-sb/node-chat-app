@@ -8,7 +8,7 @@
             {{ room }}
           </button>
           <ul :class="['users', isActive ? 'show' : '']">
-            <li v-for="user in users" :key="user.id">
+            <li v-for="user in users" :key="user.socketId">
               {{ user.username }}
             </li>
           </ul>
@@ -23,7 +23,7 @@
         Users
       </h3>
       <ul class="users">
-        <li v-for="user in users" :key="user.id">
+        <li v-for="user in users" :key="user.socketId">
           {{ user.username }}
         </li>
       </ul>
@@ -36,8 +36,8 @@
         ]">
           <p>
             <span v-show="message.username !== username" class="message__name">{{ message.username }}</span>
-            <time class="message__meta" datetime="message.createdAt">{{
-              message.createdAt | formatDatetime
+            <time class="message__meta" :datetime="String(message.createdAt)">{{
+              formatDatetime(message.createdAt)
               }}</time>
           </p>
           <p>{{ message.text }}</p>
@@ -46,7 +46,7 @@
 
       <div class="compose">
         <form id="message-form" @submit.prevent="sendMessage">
-          <textarea ref="name" v-model="message" name="message" placeholder="Type your message ..." required
+          <textarea ref="messageInput" v-model="message" name="message" placeholder="Type your message ..." required
             autocomplete="off" autocorrect="off" autocapitalize="off" @keyup.enter="sendMessage" />
           <button type="submit">
             Send
@@ -57,62 +57,75 @@
   </main>
 </template>
 
-<script>
-import io from 'socket.io-client'
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { useRoute } from 'vue-router/composables'
+import { io, type Socket } from 'socket.io-client'
 import notify from '../services/notify'
 
-export default {
+type ChatUser = {
+  username: string
+  room: string
+  socketId: string
+}
+
+type ChatMessage = {
+  id: string
+  username: string
+  text: string
+  createdAt: number
+}
+
+type RoomData = {
+  room: string
+  users: ChatUser[]
+}
+
+defineOptions({
   name: 'Chat',
-  filters: {
-    formatDatetime(value) {
-      const createdAt = new Date(value)
-      return createdAt.toLocaleString()
-    },
-  },
-  data() {
-    return {
-      users: {},
-      username: '',
-      createdAt: '',
-      message: '',
-      messages: [],
-      room: '',
-      isActive: false,
-    }
-  },
-  async created() {
-    const { username, room } = this.$route.params
-    this.username = username
-    this.room = room
-    this.socket = io(import.meta.env.VITE_SOCKET_URL)
-  },
-  mounted() {
-    const user = {
-      username: this.username,
-      room: this.room,
-    }
+})
 
-    this.socket.emit('join', user)
-    this.socket.on('message', (msg) => {
-      this.messages.push(msg)
-      if (msg.username !== this.username) {
-        notify(msg.username, msg.text)
-      }
-    })
+const formatDatetime = (value: number): string => new Date(value).toLocaleString()
 
-    this.socket.on('roomData', (data) => {
-      this.users = data.users
-    })
-  },
-  methods: {
-    sendMessage(e) {
-      if (e.shiftKey) return;
-      const body = { username: this.username, message: this.message }
-      this.socket.emit('sendMessage', body)
-      this.message = ''
-      this.$refs.name.focus()
+const route = useRoute()
+
+const username = ref(String(route.params.username ?? ''))
+const room = ref(String(route.params.room ?? ''))
+const users = ref<ChatUser[]>([])
+const messages = ref<ChatMessage[]>([])
+const message = ref('')
+const isActive = ref(false)
+const messageInput = ref<HTMLTextAreaElement | null>(null)
+
+let socket: Socket
+
+onMounted(() => {
+  socket = io(import.meta.env.VITE_SOCKET_URL)
+
+  socket.emit('join', { username: username.value, room: room.value })
+
+  socket.on('message', (msg: ChatMessage) => {
+    messages.value.push(msg)
+    if (msg.username !== username.value) {
+      notify(msg.username, msg.text)
     }
-  },
+  })
+
+  socket.on('roomData', (data: RoomData) => {
+    users.value = data.users
+  })
+})
+
+onBeforeUnmount(() => {
+  socket?.disconnect()
+})
+
+const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
+  if (e instanceof KeyboardEvent && e.shiftKey) return
+
+  socket.emit('sendMessage', { username: username.value, message: message.value })
+  message.value = ''
+  messageInput.value?.focus()
 }
 </script>
 

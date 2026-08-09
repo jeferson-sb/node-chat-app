@@ -19,19 +19,17 @@
   </section>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      username: '',
-      room: ''
-    }
-  },
-  methods: {
-    joinChat() {
-      this.$router.push(`/chat/${this.username}/${this.room}`)
-    }
-  }
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router/composables'
+
+const router = useRouter()
+
+const username = ref('')
+const room = ref('')
+
+const joinChat = (): void => {
+  router.push(`/chat/${username.value}/${room.value}`)
 }
 </script>
 
@@ -108,4 +106,3 @@ export default {
   }
 }
 </style>
-

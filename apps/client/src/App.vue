@@ -4,8 +4,8 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: "app"
-};
+<script setup lang="ts">
+defineOptions({
+  name: 'app',
+});
 </script>

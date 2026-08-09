@@ -39,7 +39,11 @@ its own branch/PR with atomic, revertable commits, in this order:
 3. **TypeScript migration** — convert all JS in `apps/server` and
    `apps/client` to TypeScript per the conventions in `AGENTS.md` (types over
    interfaces, arrow functions, no `any`, etc.). No `.js` source files should
-   remain.
+   remain. `apps/client`'s `.vue` files move to `<script setup lang="ts">`
+   with the Composition API now (Vue 2.7 supports both); full `.vue`
+   type-checking via `vue-tsc` is deferred to step 4, since `vue-tsc`
+   depends on Vue 3's `@vue/compiler-dom` and isn't reliably compatible with
+   Vue 2.7 — plain `tsc --noEmit` covers the `.ts` files in the meantime.
 4. **Vue 2 → Vue 3.7+** — migrate `apps/client` from Vue 2.7/vue-router 3 to
    Vue 3.7+/vue-router 4, replacing `@vitejs/plugin-vue2` with
    `@vitejs/plugin-vue`, and re-evaluating `vue-chat-scroll` (Vue 2-only) for

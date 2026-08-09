@@ -29,7 +29,7 @@
       </ul>
     </aside>
     <div class="chat__main">
-      <div id="messages" v-chat-scroll="{ always: false, smooth: true }" class="chat__messages">
+      <div id="messages" ref="messagesContainer" class="chat__messages">
         <div v-for="message in messages" :key="message.id" :class="[
           'message',
           message.username === username ? 'message--sent' : '',
@@ -59,9 +59,10 @@
 
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from 'vue'
-import { useRoute } from 'vue-router/composables'
+import { useRoute } from 'vue-router'
 import { io, type Socket } from 'socket.io-client'
 import notify from '../services/notify'
+import { useAutoScroll } from '../composables/useAutoScroll'
 
 type ChatUser = {
   username: string
@@ -96,6 +97,9 @@ const messages = ref<ChatMessage[]>([])
 const message = ref('')
 const isActive = ref(false)
 const messageInput = ref<HTMLTextAreaElement | null>(null)
+const messagesContainer = ref<HTMLElement | null>(null)
+
+useAutoScroll(messagesContainer, messages, { smooth: true })
 
 let socket: Socket
 

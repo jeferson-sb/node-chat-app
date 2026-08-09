@@ -1,15 +1,10 @@
-import Vue from 'vue'
-import Router from 'vue-router'
-const Join = () =>
-  import(/* webpackChunkName: "join-page" */ '@/components/Join.vue')
-const Chat = () =>
-  import(/* webpackChunkName: "chat-page" */ '@/components/Chat.vue')
+import { createRouter, createWebHistory } from 'vue-router'
 
-Vue.use(Router)
+const Join = () => import('@/components/Join.vue')
+const Chat = () => import('@/components/Chat.vue')
 
-export default new Router({
-  mode: 'history',
-  base: import.meta.env.BASE_URL,
+export default createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

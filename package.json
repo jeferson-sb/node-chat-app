@@ -14,7 +14,7 @@
   "author": "Jeferson S. Brito",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "devDependencies": {
     "taze": "^19.9.2",

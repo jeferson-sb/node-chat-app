@@ -1,6 +1,6 @@
 FROM debian:bullseye as builder
 
-ARG NODE_VERSION=22.14.0
+ARG NODE_VERSION=24.19.0
 ARG PNPM_VERSION=9.13.2
 
 RUN apt-get update; apt install -y curl

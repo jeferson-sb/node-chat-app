@@ -29,13 +29,13 @@ git clone https://github.com/jeferson-sb/node-chat-app.git && cd node-chat-app
 ```
 
 ```bash
-pnpm i && cd client && pnpm i
+pnpm install
 ```
 
 ### Usage
 
 ```bash
-cd .. && npm run concurrently
+pnpm dev
 ```
 
 ## 📝License

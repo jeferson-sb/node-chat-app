@@ -1,18 +1,14 @@
 {
   "name": "chatme",
   "version": "1.0.0",
-  "description": "Chat app built with Express & Socket.io",
-  "main": "index.js",
+  "description": "Chat app built with Express, Socket.io and Vue",
+  "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/presentation/server.js",
-    "concurrently": "concurrently \"npm run dev:server\" \"npm run dev:client\" ",
-    "dev:server": "node --watch src/presentation/server.js",
-    "dev:client": "npm run dev --prefix client",
-    "build:client": "npm run build --prefix client",
-    "lint": "eslint . --ext .js",
-    "prettier": "prettier --write \"**/*.{js,json}\"",
-    "upgrade": "taze -I"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "start": "pnpm --filter @chatme/server start"
   },
   "keywords": [],
   "author": "Jeferson S. Brito",
@@ -20,24 +16,9 @@
   "engines": {
     "node": ">=22"
   },
-  "dependencies": {
-    "concurrently": "^9.2.1",
-    "dotenv": "^16.5.0",
-    "express": "^5.2.1",
-    "morgan": "^1.10.1",
-    "socket.io": "^4.8.3",
-    "uuid": "^11.1.0",
-    "web-push": "^3.6.7"
-  },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-prettier": "^5.5.5",
-    "globals": "^17.3.0",
-    "jest": "^29.7.0",
-    "prettier": "^3.8.1",
-    "taze": "^19.9.2"
-  }
+    "taze": "^19.9.2",
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "pnpm@9.13.2"
 }

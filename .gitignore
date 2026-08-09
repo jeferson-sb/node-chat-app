@@ -4,6 +4,9 @@ logs
 npm-debug.log*
 .npm
 .env
-public
+.env.local
+.env.*.local
+dist
+.turbo
 # Local Netlify folder
 .netlify

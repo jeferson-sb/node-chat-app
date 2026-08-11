@@ -1,6 +1,8 @@
 import http from 'node:http';
 import express, { type ErrorRequestHandler } from 'express';
 import morgan from 'morgan';
+import { Pool } from 'pg';
+import { toNodeHandler } from 'better-auth/node';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type { Namespace } from 'socket.io';
 import type { Adapter } from 'socket.io-adapter';
@@ -8,6 +10,8 @@ import type { Adapter } from 'socket.io-adapter';
 import { setupSocketServer } from './websocket.ts';
 import config from '../config/index.ts';
 import HTTPError from '../infra/errors/HTTPError.ts';
+import { createAuth, type AuthDatabase } from '../infra/auth/createAuth.ts';
+import { requireAuthenticatedSocket } from './socketAuth.ts';
 import { createRedisClient } from '../infra/redis/createRedisClient.ts';
 import { InMemoryRoomRepository } from '../infra/rooms/InMemoryRoomRepository.ts';
 import { RedisRoomRepository } from '../infra/rooms/RedisRoomRepository.ts';
@@ -23,8 +27,21 @@ export type App = {
   app: express.Express;
   httpServer: http.Server;
   controller: SocketController;
-  /** Closes any Redis connections opened for this app. No-op if REDIS_URL wasn't set. */
+  /**
+   * Closes any Redis connections opened for this app (no-op if REDIS_URL
+   * wasn't set) and the auth database pool (no-op if authDatabase was
+   * injected — its lifecycle then belongs to the caller).
+   */
   close: () => Promise<void>;
+};
+
+export type CreateAppDeps = {
+  /**
+   * Injection seam for tests: pass a Kysely dialect (e.g. kysely-pglite-dialect)
+   * to run against an in-process database instead of a real Postgres pool.
+   * Defaults to a pg.Pool built from config.databaseUrl.
+   */
+  authDatabase?: AuthDatabase;
 };
 
 type RoomsSetup = {
@@ -61,27 +78,73 @@ const setupRooms = (): RoomsSetup => {
   };
 };
 
+type AuthSetup = {
+  database: AuthDatabase;
+  close: () => Promise<void>;
+};
+
+/**
+ * Accounts are mandatory (docs/adr/2026-08-09-authentication.md), so unlike
+ * REDIS_URL there's no in-memory fallback here — a missing DATABASE_URL is a
+ * misconfiguration and should fail loudly at startup rather than silently
+ * running without auth. When a database is injected (tests), its lifecycle
+ * belongs to the caller, so close() is a no-op.
+ */
+const setupAuthDatabase = (authDatabase?: AuthDatabase): AuthSetup => {
+  if (authDatabase) {
+    return { database: authDatabase, close: async () => {} };
+  }
+
+  if (!config.databaseUrl) {
+    throw new Error('DATABASE_URL is required to start the server');
+  }
+
+  const pool = new Pool({ connectionString: config.databaseUrl });
+  return { database: pool, close: () => pool.end() };
+};
+
 /**
  * Wires up the Express app, HTTP server, and Socket.io server without
  * starting to listen. Extracted from the server entrypoint so integration
  * tests can bind to an ephemeral port instead of the configured one.
  */
-export const createApp = (): App => {
+export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
   const app = express();
   const httpServer = http.createServer(app);
-  const { rooms, adapter, close } = setupRooms();
+  const { rooms, adapter, close: closeRooms } = setupRooms();
+  const { database, close: closeAuthDatabase } =
+    setupAuthDatabase(authDatabase);
   const socketServer = setupSocketServer(httpServer, { adapter });
   const controller = new SocketController({ socketServer, rooms });
+  const auth = createAuth(database, [config.client]);
+  socketServer.use(requireAuthenticatedSocket(auth));
 
-  // Add Access Control Allow Origin headers
-  app.use((_req, res, next) => {
+  // Must run before the auth mount below: Better Auth's handler responds
+  // directly (it never calls next()), so CORS headers added afterwards
+  // would never reach the client - the browser would then reject the
+  // response, since Better Auth's cross-origin sign-in/sign-up requests
+  // carry credentials (the session cookie).
+  app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', config.client);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.header(
       'Access-Control-Allow-Headers',
       'Origin, X-Requested-With, Content-Type, Accept',
     );
+    res.header(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, DELETE, OPTIONS',
+    );
+
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+
     next();
   });
+
+  app.all('/api/auth/*splat', toNodeHandler(auth));
 
   socketServer.on('connection', (socket) => {
     console.log(`[socket]: new socket connected: ${socket.id}`);
@@ -119,6 +182,11 @@ export const createApp = (): App => {
   };
 
   app.use(errorHandler);
+
+  const close = async (): Promise<void> => {
+    await closeRooms();
+    await closeAuthDatabase();
+  };
 
   return { app, httpServer, controller, close };
 };

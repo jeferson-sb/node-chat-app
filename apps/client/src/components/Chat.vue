@@ -75,6 +75,7 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { io, type Socket } from 'socket.io-client'
 import notify from '../services/notify'
+import { authClient } from '../services/auth'
 import { useAutoScroll } from '../composables/useAutoScroll'
 
 type ChatUser = {
@@ -104,7 +105,10 @@ const formatDatetime = (value: number): string =>
 
 const route = useRoute()
 
-const username = ref(String(route.params.username ?? ''))
+// Identity comes from the session, not the URL - accounts are mandatory
+// (docs/adr/2026-08-09-authentication.md), and the router guard already
+// keeps unauthenticated visitors from reaching this route (router.ts).
+const username = ref('')
 const room = ref(String(route.params.room ?? ''))
 const users = ref<ChatUser[]>([])
 const messages = ref<ChatMessage[]>([])
@@ -117,16 +121,25 @@ useAutoScroll(messagesContainer, messages, { smooth: true })
 
 let socket: Socket
 
-onMounted(() => {
+onMounted(async () => {
+  const { data } = await authClient.getSession()
+  username.value = data?.user.name ?? ''
+
   // Force websocket-only (skip the HTTP long-polling handshake) so the
   // client keeps a single persistent connection to whichever server the
   // load balancer picks — sticky sessions are only required for
   // long-polling's repeated HTTP requests, not a single websocket
   // connection. See docs/adr/2026-08-09-modernize-stack.md and
   // docker-compose.yml's round-robin Nginx upstream.
-  socket = io(import.meta.env.VITE_SOCKET_URL, { transports: ['websocket'] })
+  // withCredentials sends the session cookie on the handshake - the
+  // server verifies it (socketAuth.ts) instead of trusting a
+  // client-supplied username.
+  socket = io(import.meta.env.VITE_SOCKET_URL, {
+    transports: ['websocket'],
+    withCredentials: true,
+  })
 
-  socket.emit('join', { username: username.value, room: room.value })
+  socket.emit('join', { room: room.value })
 
   socket.on('message', (msg: ChatMessage) => {
     messages.value.push(msg)
@@ -148,7 +161,6 @@ const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
   if (e instanceof KeyboardEvent && e.shiftKey) return
 
   socket.emit('sendMessage', {
-    username: username.value,
     message: message.value,
   })
   message.value = ''

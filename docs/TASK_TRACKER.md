@@ -65,9 +65,26 @@ prerequisite for Task 2 (chat history needs a stable identity to persist
 against) and to finish Task 1 (session management).
 
 Priority: Medium
-Completed: [ ]
+Completed: [x] Better Auth + Postgres wired end-to-end: server mounts
+Better Auth at `/api/auth` (`apps/server/src/infra/auth/`), signup/login UI
+replaces `Join.vue` (`apps/client/src/components/auth/`), `/room` and
+`/chat/:room` are guarded by session (`apps/client/src/router.ts`),
+`Chat.vue` sources identity from the session instead of the removed
+`:username` route param, and the Socket.IO handshake itself is verified
+(`apps/server/src/presentation/socketAuth.ts` calls Better Auth's
+`getSession()` against the handshake's cookie header via an `io.use()`
+middleware, rejecting unauthenticated connections before `SocketController`
+ever sees them — cookie-based rather than the bearer/jwt plugin the ADR
+floated, since every replica already talks to the same Postgres, so a
+`getSession()` lookup per connect is cheap and needs no extra token
+issuance/refresh machinery). `join`/`sendMessage` no longer accept a
+client-supplied username at all; it comes from the verified session.
+
+Still open: revisiting `SocketController`'s (now-removed) username-in-use
+check doesn't fully hold — `name` isn't unique the way `email` is, so two
+accounts could share a display name. Not addressed here; flagging for a
+future pass if it matters at this app's scale.
 
 Decision recorded in docs/adr/2026-08-09-authentication.md: Better Auth
 (not Firebase or Auth.js) + PostgreSQL, accounts mandatory (no anonymous
-join). Not yet implemented — sequence with Task 2, likely sharing the
-same Postgres database.
+join).

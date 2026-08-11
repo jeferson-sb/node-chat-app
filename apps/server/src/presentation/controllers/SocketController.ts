@@ -5,16 +5,15 @@ import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message } from '../../domain/Message.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
+import { getSocketUser } from '../socketAuth.ts';
 
 export type { ChatUser };
 
 export type JoinRoomPayload = {
-  username: string;
   room: string;
 };
 
 export type SendMessagePayload = {
-  username: string;
   message: string;
 };
 
@@ -32,19 +31,16 @@ export default class SocketController {
     this.rooms = rooms;
   }
 
-  async onJoinRoom(
-    socket: Socket,
-    { username, room }: JoinRoomPayload,
-  ): Promise<void> {
-    if (!username && !room) {
-      console.error('Username and room are required');
+  async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
+    if (!room) {
+      console.error('Room is required');
     }
 
-    const existingUser = await this.rooms.findUserByUsername(username);
-    if (existingUser) {
-      console.error('Username already in use!');
-    }
-
+    // No "username already in use" check here: the username now comes
+    // from a verified account (socketAuth.ts), not client input, so the
+    // account itself - not this check - is what makes it unique (see
+    // docs/adr/2026-08-09-authentication.md).
+    const { name: username } = getSocketUser(socket);
     await this.rooms.addUser({ username, room, socketId: socket.id });
 
     const welcomeMessage = Message.from({
@@ -73,8 +69,9 @@ export default class SocketController {
 
   async onSendMessage(
     socket: Socket,
-    { username, message }: SendMessagePayload,
+    { message }: SendMessagePayload,
   ): Promise<void> {
+    const { name: username } = getSocketUser(socket);
     const user = await this.rooms.findUserByUsername(username);
     const msg = Message.from({
       id: uuidv4(),

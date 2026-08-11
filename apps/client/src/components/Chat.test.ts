@@ -1,24 +1,38 @@
-import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Chat from './Chat.vue'
 
 type Handler = (...args: unknown[]) => void
 
-const { socketHandlers, emitMock, disconnectMock, ioMock, notifyMock } =
-  vi.hoisted(() => {
-    const socketHandlers = new Map<string, Handler>()
-    const emitMock = vi.fn()
-    const disconnectMock = vi.fn()
-    const ioMock = vi.fn(() => ({
-      on: (event: string, handler: Handler) => {
-        socketHandlers.set(event, handler)
-      },
-      emit: emitMock,
-      disconnect: disconnectMock,
-    }))
-    const notifyMock = vi.fn()
-    return { socketHandlers, emitMock, disconnectMock, ioMock, notifyMock }
-  })
+const {
+  socketHandlers,
+  emitMock,
+  disconnectMock,
+  ioMock,
+  notifyMock,
+  getSessionMock,
+} = vi.hoisted(() => {
+  const socketHandlers = new Map<string, Handler>()
+  const emitMock = vi.fn()
+  const disconnectMock = vi.fn()
+  const ioMock = vi.fn((..._args: unknown[]) => ({
+    on: (event: string, handler: Handler) => {
+      socketHandlers.set(event, handler)
+    },
+    emit: emitMock,
+    disconnect: disconnectMock,
+  }))
+  const notifyMock = vi.fn()
+  const getSessionMock = vi.fn()
+  return {
+    socketHandlers,
+    emitMock,
+    disconnectMock,
+    ioMock,
+    notifyMock,
+    getSessionMock,
+  }
+})
 
 vi.mock('socket.io-client', () => ({
   io: ioMock,
@@ -28,9 +42,23 @@ vi.mock('../services/notify', () => ({
   default: notifyMock,
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { username: 'alice', room: 'general' } }),
+vi.mock('../services/auth', () => ({
+  authClient: { getSession: getSessionMock },
 }))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: { room: 'general' } }),
+}))
+
+const mountChat = async () => {
+  const wrapper = mount(Chat)
+  await flushPromises()
+  return wrapper
+}
+
+beforeEach(() => {
+  getSessionMock.mockResolvedValue({ data: { user: { name: 'alice' } } })
+})
 
 afterEach(() => {
   socketHandlers.clear()
@@ -38,20 +66,19 @@ afterEach(() => {
   disconnectMock.mockClear()
   notifyMock.mockClear()
   ioMock.mockClear()
+  getSessionMock.mockReset()
 })
 
 describe('Chat', () => {
-  it('joins the room on mount', () => {
-    mount(Chat)
+  it('joins the room on mount, authenticated via the session cookie', async () => {
+    await mountChat()
 
-    expect(emitMock).toHaveBeenCalledWith('join', {
-      username: 'alice',
-      room: 'general',
-    })
+    expect(ioMock.mock.calls[0]?.[1]).toMatchObject({ withCredentials: true })
+    expect(emitMock).toHaveBeenCalledWith('join', { room: 'general' })
   })
 
-  it('renders incoming messages and notifies for messages from others', () => {
-    mount(Chat)
+  it('renders incoming messages and notifies for messages from others', async () => {
+    await mountChat()
 
     socketHandlers.get('message')?.({
       id: '1',
@@ -63,8 +90,8 @@ describe('Chat', () => {
     expect(notifyMock).toHaveBeenCalledWith('bob', 'hi there')
   })
 
-  it('does not notify for the current user own messages', () => {
-    mount(Chat)
+  it('does not notify for the current user own messages', async () => {
+    await mountChat()
 
     socketHandlers.get('message')?.({
       id: '1',
@@ -77,7 +104,7 @@ describe('Chat', () => {
   })
 
   it('renders the user list from roomData events', async () => {
-    const wrapper = mount(Chat)
+    const wrapper = await mountChat()
 
     socketHandlers.get('roomData')?.({
       room: 'general',
@@ -95,13 +122,12 @@ describe('Chat', () => {
   })
 
   it('sends a message and clears the input', async () => {
-    const wrapper = mount(Chat)
+    const wrapper = await mountChat()
 
     await wrapper.find('textarea').setValue('hello everyone')
     await wrapper.find('form').trigger('submit.prevent')
 
     expect(emitMock).toHaveBeenCalledWith('sendMessage', {
-      username: 'alice',
       message: 'hello everyone',
     })
     expect(
@@ -109,8 +135,8 @@ describe('Chat', () => {
     ).toBe('')
   })
 
-  it('disconnects the socket when unmounted', () => {
-    const wrapper = mount(Chat)
+  it('disconnects the socket when unmounted', async () => {
+    const wrapper = await mountChat()
 
     wrapper.unmount()
 

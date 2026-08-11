@@ -26,6 +26,22 @@ services:
       timeout: 3s
       retries: 5
 
+  # Backs Better Auth (accounts are mandatory, see
+  # docs/adr/2026-08-09-authentication.md) - see infra/auth/createAuth.ts.
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: chatme
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # Only server1 has a `build` block. server2/server3 reuse the same
   # `chatme-server` image tag it produces — giving all three a `build`
   # block (e.g. via a YAML anchor including it) makes Compose build and
@@ -43,9 +59,14 @@ services:
       PORT: '8080'
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/chatme
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8080}
       CLIENT_APP_URL: ${CLIENT_APP_URL:-http://localhost:5300}
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   server2:
@@ -53,6 +74,8 @@ services:
     environment: *server-env
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       server1:
         condition: service_started
@@ -62,6 +85,8 @@ services:
     environment: *server-env
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       server1:
         condition: service_started

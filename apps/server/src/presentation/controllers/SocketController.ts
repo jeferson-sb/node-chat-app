@@ -6,6 +6,7 @@ import { Message } from '../../domain/Message.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
+import type { MessageQueue } from '../../infra/queue/MessageQueue.ts';
 import { getSocketUser } from '../socketAuth.ts';
 
 export type { ChatUser };
@@ -22,6 +23,7 @@ export type SocketControllerDeps = {
   socketServer: Server;
   rooms: RoomRepository;
   messageHistory: MessageHistoryRepository;
+  messageQueue: MessageQueue;
 };
 
 /** How many past messages a joining user sees (docs/adr/2026-08-11-chat-history-storage.md). */
@@ -31,11 +33,18 @@ export default class SocketController {
   private readonly socketServer: Server;
   private readonly rooms: RoomRepository;
   private readonly messageHistory: MessageHistoryRepository;
+  private readonly messageQueue: MessageQueue;
 
-  constructor({ socketServer, rooms, messageHistory }: SocketControllerDeps) {
+  constructor({
+    socketServer,
+    rooms,
+    messageHistory,
+    messageQueue,
+  }: SocketControllerDeps) {
     this.socketServer = socketServer;
     this.rooms = rooms;
     this.messageHistory = messageHistory;
+    this.messageQueue = messageQueue;
   }
 
   async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
@@ -95,8 +104,12 @@ export default class SocketController {
     });
 
     if (user) {
-      await this.messageHistory.saveMessage(user.room, msg.snapshot());
+      // Broadcast first: real-time delivery must not wait on, or fail
+      // because of, history persistence (docs/adr/2026-08-11-message-
+      // queue-persistence.md) - enqueueing is buffered/retried by the
+      // queue, unlike a direct write that fails outright.
       this.socketServer.to(user.room).emit(eventTypes.message, msg.snapshot());
+      await this.messageQueue.enqueue(user.room, msg.snapshot());
     }
   }
 

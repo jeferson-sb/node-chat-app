@@ -56,7 +56,39 @@ Acceptance criteria:
 Use Redis/RabbitMQ for message queueing to handle high traffic and ensure messages are delivered in order and for routing between nodes
 
 Priority: Medium
-Completed: [ ]
+Completed: [x] Cross-node routing was already solved by Task 1/4's
+`@socket.io/redis-adapter` pub/sub - real-time broadcast is untouched by
+this task. What was missing: `SocketController.onSendMessage`'s Scylla
+write was synchronous with the broadcast, so a slow/failed write stalled
+delivery and silently lost the message. Decision and full reasoning in
+docs/adr/2026-08-11-message-queue-persistence.md.
+
+Added a Redis Streams queue (`apps/server/src/infra/queue/`) buffering
+only the persistence write: `onSendMessage` now broadcasts first, then
+`messageQueue.enqueue(...)`s the message onto a single global stream
+(`chatme:messages:pending`). An in-process consumer
+(`RedisMessagePersistenceRunner` + `MessagePersistenceConsumer`), started
+per `@chatme/server` replica and sharing one consumer group, reads
+entries and persists them via the existing `MessageHistoryRepository`,
+retrying with backoff and dead-lettering to `chatme:messages:dead` after
+repeated failures. Falls back to `InMemoryMessageQueue` (direct,
+synchronous passthrough) when `REDIS_URL` is unset - same graceful-degrade
+pattern as `RoomRepository`/`MessageHistoryRepository`.
+
+The retry/dead-letter decision logic is unit-tested in isolation
+(`MessagePersistenceConsumer.test.ts`, fakes for the history repo and
+stream ack/dead-letter calls, no real Redis needed).
+`SocketController.test.ts` covers the broadcast-not-blocked-by-enqueue-
+failure behavior. The Redis Streams wiring itself (XADD/XREADGROUP/XACK)
+has no automated test - same "manual verification, not automated"
+convention as `RedisRoomRepository`/`ScyllaMessageHistoryRepository` -
+but was manually verified against a real Redis instance during
+implementation (happy path: enqueue -> consume -> persist round trip;
+failure path: always-failing persist -> dead-lettered after max
+attempts), not just asserted. See docker-compose.yml's top comment for
+how to re-verify (including the HA story: stop Scylla, confirm the
+backlog queues in Redis and drains once Scylla returns, with no server
+restart).
 
 ## Task 4 - Load Balancing
 

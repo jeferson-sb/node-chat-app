@@ -3,6 +3,7 @@ import type { Server, Socket } from 'socket.io';
 import SocketController from './SocketController.ts';
 import { InMemoryRoomRepository } from '../../infra/rooms/InMemoryRoomRepository.ts';
 import { InMemoryMessageHistoryRepository } from '../../infra/history/InMemoryMessageHistoryRepository.ts';
+import { InMemoryMessageQueue } from '../../infra/queue/InMemoryMessageQueue.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 
 /**
@@ -56,6 +57,7 @@ describe('SocketController', () => {
       socketServer,
       rooms: new InMemoryRoomRepository(),
       messageHistory,
+      messageQueue: new InMemoryMessageQueue(messageHistory),
     });
   });
 
@@ -187,6 +189,31 @@ describe('SocketController', () => {
           text: 'hello everyone',
         }),
       ]);
+    });
+
+    it('broadcasts the message even when enqueuing it to history fails', async () => {
+      const failingController = new SocketController({
+        socketServer,
+        rooms: new InMemoryRoomRepository(),
+        messageHistory,
+        messageQueue: {
+          enqueue: vi.fn().mockRejectedValue(new Error('queue unavailable')),
+        },
+      });
+      const socket = createMockSocket('socket-1', 'alice');
+      await failingController.onJoinRoom(socket, { room: 'general' });
+      vi.mocked(socketServer.to).mockClear();
+
+      await expect(
+        failingController.onSendMessage(socket, { message: 'hello everyone' }),
+      ).rejects.toThrow('queue unavailable');
+
+      expect(socketServer.to).toHaveBeenCalledWith('general');
+      const roomEmitter = socketServer.to('general');
+      expect(roomEmitter.emit).toHaveBeenCalledWith(
+        eventTypes.message,
+        expect.objectContaining({ username: 'alice', text: 'hello everyone' }),
+      );
     });
 
     it('rejects a message over the length limit without broadcasting it', async () => {

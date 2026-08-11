@@ -20,6 +20,12 @@ import type { RoomRepository } from '../infra/rooms/RoomRepository.ts';
 import { InMemoryMessageHistoryRepository } from '../infra/history/InMemoryMessageHistoryRepository.ts';
 import { ScyllaMessageHistoryRepository } from '../infra/history/ScyllaMessageHistoryRepository.ts';
 import type { MessageHistoryRepository } from '../infra/history/MessageHistoryRepository.ts';
+import { InMemoryMessageQueue } from '../infra/queue/InMemoryMessageQueue.ts';
+import { RedisMessageQueue } from '../infra/queue/RedisMessageQueue.ts';
+import { RedisConsumerStream } from '../infra/queue/RedisConsumerStream.ts';
+import { MessagePersistenceConsumer } from '../infra/queue/MessagePersistenceConsumer.ts';
+import { RedisMessagePersistenceRunner } from '../infra/queue/RedisMessagePersistenceRunner.ts';
+import type { MessageQueue } from '../infra/queue/MessageQueue.ts';
 
 // TODO: Extract to use case
 import SocketController, {
@@ -139,6 +145,54 @@ const setupMessageHistory = (): MessageHistorySetup => {
   };
 };
 
+type MessageQueueSetup = {
+  messageQueue: MessageQueue;
+  close: () => Promise<void>;
+};
+
+/**
+ * Picks the send-message persistence buffer. Without REDIS_URL, falls
+ * back to writing directly and synchronously to messageHistory - same
+ * graceful-degrade pattern as setupRooms/setupMessageHistory (a single
+ * process has no cross-node write to buffer against). With REDIS_URL, a
+ * consumer group runner starts in-process, sharing the group with every
+ * other replica, so any of them can persist any pending entry (see
+ * docs/adr/2026-08-11-message-queue-persistence.md).
+ */
+const setupMessageQueue = (
+  messageHistory: MessageHistoryRepository,
+): MessageQueueSetup => {
+  if (!config.redisUrl) {
+    return {
+      messageQueue: new InMemoryMessageQueue(messageHistory),
+      close: async () => {},
+    };
+  }
+
+  const producerClient = createRedisClient(config.redisUrl);
+  const consumerReadClient = createRedisClient(config.redisUrl);
+
+  const consumer = new MessagePersistenceConsumer({
+    messageHistory,
+    stream: new RedisConsumerStream(producerClient),
+  });
+  const runner = new RedisMessagePersistenceRunner(
+    consumerReadClient,
+    consumer,
+  );
+  const started = runner.start().catch(console.error);
+
+  return {
+    messageQueue: new RedisMessageQueue(producerClient),
+    close: async () => {
+      await started;
+      await runner.stop();
+      producerClient.disconnect();
+      consumerReadClient.disconnect();
+    },
+  };
+};
+
 /**
  * Wires up the Express app, HTTP server, and Socket.io server without
  * starting to listen. Extracted from the server entrypoint so integration
@@ -151,11 +205,14 @@ export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
   const { database, close: closeAuthDatabase } =
     setupAuthDatabase(authDatabase);
   const { messageHistory, close: closeMessageHistory } = setupMessageHistory();
+  const { messageQueue, close: closeMessageQueue } =
+    setupMessageQueue(messageHistory);
   const socketServer = setupSocketServer(httpServer, { adapter });
   const controller = new SocketController({
     socketServer,
     rooms,
     messageHistory,
+    messageQueue,
   });
   const auth = createAuth(database, [config.client]);
   socketServer.use(requireAuthenticatedSocket(auth));
@@ -228,6 +285,7 @@ export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
     await closeRooms();
     await closeAuthDatabase();
     await closeMessageHistory();
+    await closeMessageQueue();
   };
 
   return { app, httpServer, controller, close };

@@ -5,7 +5,9 @@ name: chatme
 # state and cross-node broadcast through Redis (RedisRoomRepository +
 # the socket.io Redis adapter — see apps/server/src/presentation/createApp.ts).
 # Also a 3-node ScyllaDB cluster for chat history (Task 2, see
-# docs/adr/2026-08-11-chat-history-storage.md).
+# docs/adr/2026-08-11-chat-history-storage.md), and the same Redis
+# instance buffers history writes to Scylla through a Streams-based queue
+# (Task 3, see docs/adr/2026-08-11-message-queue-persistence.md).
 #
 # Usage:
 #   docker compose up --build
@@ -22,6 +24,13 @@ name: chatme
 # conversation - writes/reads keep working (replication factor 3, only one
 # of three nodes down), unlike a single-instance store where that would be
 # an outage.
+#
+# Verify the message queue specifically: `docker compose stop scylla1
+# scylla2 scylla3` mid-conversation - live chat keeps working (broadcast
+# never touched the queue), sent messages queue up in Redis
+# (`redis-cli XLEN chatme:messages:pending`), then bring Scylla back up
+# and watch the backlog drain (`XLEN` falling back toward 0) without
+# restarting any server replica.
 
 services:
   redis:

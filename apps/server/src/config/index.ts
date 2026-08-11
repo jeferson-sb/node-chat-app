@@ -8,6 +8,8 @@ export type Config = {
   client: string;
   redisUrl: string | undefined;
   databaseUrl: string | undefined;
+  scyllaContactPoints: string[] | undefined;
+  scyllaLocalDataCenter: string;
 };
 
 const config: Config = {
@@ -23,6 +25,14 @@ const config: Config = {
   // docs/adr/2026-08-09-authentication.md), so createApp() throws at
   // startup if this is unset.
   databaseUrl: process.env.DATABASE_URL,
+  // Backs chat history (see infra/history/). Unset means no persisted
+  // history - falls back to InMemoryMessageHistoryRepository, same
+  // graceful-degrade pattern as redisUrl (see
+  // docs/adr/2026-08-11-chat-history-storage.md).
+  scyllaContactPoints: process.env.SCYLLA_CONTACT_POINTS?.split(',').map(
+    (point) => point.trim(),
+  ),
+  scyllaLocalDataCenter: process.env.SCYLLA_LOCAL_DATACENTER || 'datacenter1',
 };
 
 export default config;

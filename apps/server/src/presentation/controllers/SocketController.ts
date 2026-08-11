@@ -5,6 +5,7 @@ import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message } from '../../domain/Message.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
+import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
 import { getSocketUser } from '../socketAuth.ts';
 
 export type { ChatUser };
@@ -20,15 +21,21 @@ export type SendMessagePayload = {
 export type SocketControllerDeps = {
   socketServer: Server;
   rooms: RoomRepository;
+  messageHistory: MessageHistoryRepository;
 };
+
+/** How many past messages a joining user sees (docs/adr/2026-08-11-chat-history-storage.md). */
+const HISTORY_LIMIT = 50;
 
 export default class SocketController {
   private readonly socketServer: Server;
   private readonly rooms: RoomRepository;
+  private readonly messageHistory: MessageHistoryRepository;
 
-  constructor({ socketServer, rooms }: SocketControllerDeps) {
+  constructor({ socketServer, rooms, messageHistory }: SocketControllerDeps) {
     this.socketServer = socketServer;
     this.rooms = rooms;
+    this.messageHistory = messageHistory;
   }
 
   async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
@@ -42,6 +49,14 @@ export default class SocketController {
     // docs/adr/2026-08-09-authentication.md).
     const { name: username } = getSocketUser(socket);
     await this.rooms.addUser({ username, room, socketId: socket.id });
+
+    socket.join(room);
+
+    const history = await this.messageHistory.getRecentMessages(
+      room,
+      HISTORY_LIMIT,
+    );
+    socket.emit(eventTypes.history, history.slice().reverse());
 
     const welcomeMessage = Message.from({
       id: uuidv4(),
@@ -57,7 +72,6 @@ export default class SocketController {
       createdAt: Date.now(),
     });
 
-    socket.join(room);
     socket.emit(eventTypes.message, welcomeMessage.snapshot());
     socket.to(room).emit(eventTypes.message, joinMessage.snapshot());
 
@@ -81,6 +95,7 @@ export default class SocketController {
     });
 
     if (user) {
+      await this.messageHistory.saveMessage(user.room, msg.snapshot());
       this.socketServer.to(user.room).emit(eventTypes.message, msg.snapshot());
     }
   }

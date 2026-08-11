@@ -14,7 +14,7 @@ const execAsync = promisify(exec);
  * `docker compose up -d postgres`).
  */
 export default async function globalSetup(): Promise<void> {
-  await execAsync('pnpm --filter @chatme/server run db:migrate', {
+  await execAsync('pnpm --filter @chatme/server run db:migrate:auth', {
     env: { ...process.env, DATABASE_URL, BETTER_AUTH_SECRET },
   });
 }

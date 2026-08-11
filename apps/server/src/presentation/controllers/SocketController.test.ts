@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server, Socket } from 'socket.io';
 import SocketController from './SocketController.ts';
 import { InMemoryRoomRepository } from '../../infra/rooms/InMemoryRoomRepository.ts';
+import { InMemoryMessageHistoryRepository } from '../../infra/history/InMemoryMessageHistoryRepository.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 
 /**
@@ -45,13 +46,16 @@ const createMockServer = (): Server => {
 
 describe('SocketController', () => {
   let socketServer: Server;
+  let messageHistory: InMemoryMessageHistoryRepository;
   let controller: SocketController;
 
   beforeEach(() => {
     socketServer = createMockServer();
+    messageHistory = new InMemoryMessageHistoryRepository();
     controller = new SocketController({
       socketServer,
       rooms: new InMemoryRoomRepository(),
+      messageHistory,
     });
   });
 
@@ -111,6 +115,37 @@ describe('SocketController', () => {
 
       expect(await controller.getUsersOnRoom('general')).toHaveLength(2);
     });
+
+    it('emits persisted history to the joining socket, oldest first', async () => {
+      await messageHistory.saveMessage('general', {
+        id: '1',
+        username: 'alice',
+        text: 'first',
+        createdAt: 1,
+      });
+      await messageHistory.saveMessage('general', {
+        id: '2',
+        username: 'alice',
+        text: 'second',
+        createdAt: 2,
+      });
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(socket.emit).toHaveBeenCalledWith(eventTypes.history, [
+        expect.objectContaining({ text: 'first' }),
+        expect.objectContaining({ text: 'second' }),
+      ]);
+    });
+
+    it('does not persist the synthetic welcome/join messages', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(await messageHistory.getRecentMessages('general', 10)).toEqual([]);
+    });
   });
 
   describe('onSendMessage', () => {
@@ -138,6 +173,20 @@ describe('SocketController', () => {
       await controller.onSendMessage(socket, { message: 'hello?' });
 
       expect(socketServer.to).not.toHaveBeenCalled();
+    });
+
+    it('persists the message to history', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      await controller.onSendMessage(socket, { message: 'hello everyone' });
+
+      expect(await messageHistory.getRecentMessages('general', 10)).toEqual([
+        expect.objectContaining({
+          username: 'alice',
+          text: 'hello everyone',
+        }),
+      ]);
     });
 
     it('rejects a message over the length limit without broadcasting it', async () => {

@@ -26,10 +26,30 @@ still out of scope; there's no auth in this app yet.
 ## Task 2 - Chat persistance
 
 Priority: Medium
-Completed: [ ]
+Completed: [~] Partial — ScyllaDB-backed history wired end-to-end per
+docs/adr/2026-08-11-chat-history-storage.md: `SocketController.onSendMessage`
+persists real user messages (`apps/server/src/infra/history/`), `onJoinRoom`
+emits the last 50 as a new `history` socket event, and `Chat.vue` renders
+them before any live messages arrive. Falls back to
+`InMemoryMessageHistoryRepository` when `SCYLLA_CONTACT_POINTS` is unset
+(same graceful-degrade pattern as Redis/`RoomRepository`), covered by
+`SocketController.test.ts` against that fallback.
+
+Not yet verified against a real cluster: this dev machine's Docker
+Desktop VM only has ~1.9GB RAM, not enough to run the 3-node cluster in
+`docker-compose.yml` (a single developer-mode Scylla node alone
+crash-looped on `insufficient physical memory`). `ScyllaMessageHistoryRepository`
+and the migration script (`pnpm run db:migrate:scylla`) are therefore
+unverified against a real Scylla/Cassandra wire protocol — same
+"manual verification, not automated" category as `RedisRoomRepository`
+(docs/adr/2026-08-09-horizontal-scaling.md), except the manual step itself
+is still outstanding here. Revisit once more memory is available, or on
+a machine/CI runner that can fit the cluster.
 
 Acceptance criteria:
-- [ ] Users can see their previous chat history when they log back in.
+- [x] Users can see their previous chat history when they log back in
+      (verified via `SocketController.test.ts` against the in-memory
+      fallback; not yet against a real Scylla cluster, see above).
 
 ## Task 3 - Scalability with Message Queue
 
@@ -88,3 +108,11 @@ future pass if it matters at this app's scale.
 Decision recorded in docs/adr/2026-08-09-authentication.md: Better Auth
 (not Firebase or Auth.js) + PostgreSQL, accounts mandatory (no anonymous
 join).
+
+## Task 6 - Individual services
+
+- Chat service (stateful service, provides the websocket connection by facilitating message sending/receiving)
+- Authentication service
+- Room management service
+- User profile service
+- Service discovery service (Apache Zookeeper)

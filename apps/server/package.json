@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/presentation/server.ts",
     "dev": "node --watch src/presentation/server.ts",
-    "db:migrate": "better-auth migrate -y",
+    "db:migrate:auth": "better-auth migrate -y",
+    "db:migrate:scylla": "node src/infra/history/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,6 +22,7 @@
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
     "better-auth": "^1.6.26",
+    "cassandra-driver": "^4.9.0",
     "dotenv": "^16.5.0",
     "express": "^5.2.1",
     "ioredis": "^6.0.0",

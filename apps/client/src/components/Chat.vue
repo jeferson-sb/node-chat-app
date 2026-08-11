@@ -143,6 +143,10 @@ onMounted(async () => {
 
   socket.emit('join', { room: room.value })
 
+  socket.on('history', (history: ChatMessage[]) => {
+    messages.value = history
+  })
+
   socket.on('message', (msg: ChatMessage) => {
     messages.value.push(msg)
     if (msg.username !== username.value) {

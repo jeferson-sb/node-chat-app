@@ -2,6 +2,7 @@ import http from 'node:http';
 import express, { type ErrorRequestHandler } from 'express';
 import morgan from 'morgan';
 import { Pool } from 'pg';
+import { Client as ScyllaClient } from 'cassandra-driver';
 import { toNodeHandler } from 'better-auth/node';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type { Namespace } from 'socket.io';
@@ -16,6 +17,9 @@ import { createRedisClient } from '../infra/redis/createRedisClient.ts';
 import { InMemoryRoomRepository } from '../infra/rooms/InMemoryRoomRepository.ts';
 import { RedisRoomRepository } from '../infra/rooms/RedisRoomRepository.ts';
 import type { RoomRepository } from '../infra/rooms/RoomRepository.ts';
+import { InMemoryMessageHistoryRepository } from '../infra/history/InMemoryMessageHistoryRepository.ts';
+import { ScyllaMessageHistoryRepository } from '../infra/history/ScyllaMessageHistoryRepository.ts';
+import type { MessageHistoryRepository } from '../infra/history/MessageHistoryRepository.ts';
 
 // TODO: Extract to use case
 import SocketController, {
@@ -29,8 +33,9 @@ export type App = {
   controller: SocketController;
   /**
    * Closes any Redis connections opened for this app (no-op if REDIS_URL
-   * wasn't set) and the auth database pool (no-op if authDatabase was
-   * injected — its lifecycle then belongs to the caller).
+   * wasn't set), the auth database pool (no-op if authDatabase was
+   * injected — its lifecycle then belongs to the caller), and the Scylla
+   * client (no-op if SCYLLA_CONTACT_POINTS wasn't set).
    */
   close: () => Promise<void>;
 };
@@ -103,6 +108,37 @@ const setupAuthDatabase = (authDatabase?: AuthDatabase): AuthSetup => {
   return { database: pool, close: () => pool.end() };
 };
 
+type MessageHistorySetup = {
+  messageHistory: MessageHistoryRepository;
+  close: () => Promise<void>;
+};
+
+/**
+ * Picks the chat history store. Without SCYLLA_CONTACT_POINTS, falls
+ * back to single-process in-memory history — same graceful-degrade
+ * pattern as setupRooms/REDIS_URL (see
+ * docs/adr/2026-08-11-chat-history-storage.md).
+ */
+const setupMessageHistory = (): MessageHistorySetup => {
+  if (!config.scyllaContactPoints) {
+    return {
+      messageHistory: new InMemoryMessageHistoryRepository(),
+      close: async () => {},
+    };
+  }
+
+  const client = new ScyllaClient({
+    contactPoints: config.scyllaContactPoints,
+    localDataCenter: config.scyllaLocalDataCenter,
+    keyspace: 'chatme',
+  });
+
+  return {
+    messageHistory: new ScyllaMessageHistoryRepository(client),
+    close: () => client.shutdown(),
+  };
+};
+
 /**
  * Wires up the Express app, HTTP server, and Socket.io server without
  * starting to listen. Extracted from the server entrypoint so integration
@@ -114,8 +150,13 @@ export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
   const { rooms, adapter, close: closeRooms } = setupRooms();
   const { database, close: closeAuthDatabase } =
     setupAuthDatabase(authDatabase);
+  const { messageHistory, close: closeMessageHistory } = setupMessageHistory();
   const socketServer = setupSocketServer(httpServer, { adapter });
-  const controller = new SocketController({ socketServer, rooms });
+  const controller = new SocketController({
+    socketServer,
+    rooms,
+    messageHistory,
+  });
   const auth = createAuth(database, [config.client]);
   socketServer.use(requireAuthenticatedSocket(auth));
 
@@ -186,6 +227,7 @@ export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
   const close = async (): Promise<void> => {
     await closeRooms();
     await closeAuthDatabase();
+    await closeMessageHistory();
   };
 
   return { app, httpServer, controller, close };

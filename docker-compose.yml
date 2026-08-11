@@ -4,9 +4,12 @@ name: chatme
 # @chatme/server instances behind an Nginx load balancer, sharing room
 # state and cross-node broadcast through Redis (RedisRoomRepository +
 # the socket.io Redis adapter — see apps/server/src/presentation/createApp.ts).
+# Also a 3-node ScyllaDB cluster for chat history (Task 2, see
+# docs/adr/2026-08-11-chat-history-storage.md).
 #
 # Usage:
 #   docker compose up --build
+#   SCYLLA_CONTACT_POINTS=localhost pnpm --filter @chatme/server run db:migrate:scylla
 #   pnpm --filter @chatme/client dev -- --port 5300   # in another terminal
 #   VITE_SOCKET_URL=http://localhost:8080 (Nginx), see apps/client/.env.example
 #
@@ -14,6 +17,11 @@ name: chatme
 # users on different nodes can see/message each other, by opening two
 # browser tabs on the same room and checking `docker compose logs -f` for
 # "new socket connected" lines split across server1/server2/server3.
+#
+# Verify Scylla's HA story specifically: `docker compose stop scylla2` mid-
+# conversation - writes/reads keep working (replication factor 3, only one
+# of three nodes down), unlike a single-instance store where that would be
+# an outage.
 
 services:
   redis:
@@ -42,6 +50,51 @@ services:
       timeout: 3s
       retries: 5
 
+  # Backs chat history (docs/adr/2026-08-11-chat-history-storage.md) - a
+  # 3-node cluster (replication factor 3, set by the migration script)
+  # mirroring the app-server replica pattern below, to actually
+  # demonstrate leaderless HA/write scaling rather than a single-instance
+  # stand-in. --developer-mode relaxes Scylla's production hardware
+  # checks (NUMA, disk I/O scheduler) for local dev; --overprovisioned/
+  # --smp/--memory cap resource usage since this isn't performance-tuned.
+  scylla1:
+    image: scylladb/scylla:6.2
+    command: --smp 1 --memory 750M --overprovisioned 1 --developer-mode 1 --api-address 0.0.0.0
+    ports:
+      - '9042:9042'
+    healthcheck:
+      test: ['CMD-SHELL', 'cqlsh -e "SELECT now() FROM system.local"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  scylla2:
+    image: scylladb/scylla:6.2
+    command: --smp 1 --memory 750M --overprovisioned 1 --developer-mode 1 --seeds=scylla1
+    depends_on:
+      scylla1:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'cqlsh -e "SELECT now() FROM system.local"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  scylla3:
+    image: scylladb/scylla:6.2
+    command: --smp 1 --memory 750M --overprovisioned 1 --developer-mode 1 --seeds=scylla1
+    depends_on:
+      scylla1:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'cqlsh -e "SELECT now() FROM system.local"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
   # Only server1 has a `build` block. server2/server3 reuse the same
   # `chatme-server` image tag it produces — giving all three a `build`
   # block (e.g. via a YAML anchor including it) makes Compose build and
@@ -60,6 +113,7 @@ services:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/chatme
+      SCYLLA_CONTACT_POINTS: scylla1,scylla2,scylla3
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8080}
       CLIENT_APP_URL: ${CLIENT_APP_URL:-http://localhost:5300}
@@ -67,6 +121,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      scylla1:
         condition: service_healthy
 
   server2:
@@ -76,6 +132,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      scylla1:
         condition: service_healthy
       server1:
         condition: service_started
@@ -87,6 +145,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      scylla1:
         condition: service_healthy
       server1:
         condition: service_started

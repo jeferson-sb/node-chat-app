@@ -103,6 +103,26 @@ describe('Chat', () => {
     expect(notifyMock).not.toHaveBeenCalled()
   })
 
+  it('renders history received on join, then appends live messages after it', async () => {
+    const wrapper = await mountChat()
+
+    socketHandlers.get('history')?.([
+      { id: '1', username: 'alice', text: 'earlier message', createdAt: 1 },
+    ])
+    socketHandlers.get('message')?.({
+      id: '2',
+      username: 'bob',
+      text: 'live message',
+      createdAt: 2,
+    })
+    await wrapper.vm.$nextTick()
+
+    const rendered = wrapper.findAll('#messages .message')
+    expect(rendered).toHaveLength(2)
+    expect(rendered[0]?.text()).toContain('earlier message')
+    expect(rendered[1]?.text()).toContain('live message')
+  })
+
   it('renders the user list from roomData events', async () => {
     const wrapper = await mountChat()
 

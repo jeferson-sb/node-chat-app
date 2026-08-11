@@ -1,22 +1,75 @@
 # ChatApp
 
-Lightweight chat app built with Express, Socket.io and Vue.js
+Lightweight chat app built with Express, Socket.io and Vue.js — with real
+accounts, persisted history, and horizontal scaling.
 
 ![Alt text](.github/mockup.png)
 
 ## 🛠 Tools
+
+**Runtime**
 
 - [Node.js](https://nodejs.org/en/docs/)
 - [Vue](https://vuejs.org/)
 - [Express](http://expressjs.com/)
 - [Socket.io](https://socket.io/)
 
+**Data & auth**
+
+- [Better Auth](https://www.better-auth.com/) — accounts and sessions
+- [PostgreSQL](https://www.postgresql.org/) — backs Better Auth
+- [Redis](https://redis.io/) — room roster, cross-node broadcast, and the
+  chat-history write queue
+- [ScyllaDB](https://www.scylladb.com/) — persisted chat history
+
+**Infra & testing**
+
+- [Nginx](https://nginx.org/) — load balancing
+- [Docker Compose](https://docs.docker.com/compose/) — local multi-service stack
+- [Vitest](https://vitest.dev/) / [Playwright](https://playwright.dev/) — unit & e2e tests
+- [Turborepo](https://turbo.build/) — monorepo tasks
+
 ## 💻 Demo
 
 [Click here](https://chatme-app.netlify.app/)
 
-> [!WARNING]
-> Be aware that messages sent on any room are NOT persisted.
+> [!NOTE]
+> Accounts are required — the old anonymous nickname flow is gone. Sign up
+> or log in before joining a room.
+
+## 🏗️ Architecture
+
+![ChatMe architecture diagram](docs/architecture.svg)
+
+A client connects through an Nginx load balancer to one of several
+stateless `@chatme/server` replicas. Every replica shares the same three
+backing stores rather than owning its own:
+
+- **Redis** — the room roster, the socket.io cross-node broadcast adapter,
+  and a Streams-based queue that buffers chat-history writes.
+- **PostgreSQL** — user accounts, via Better Auth. A socket connection is
+  only accepted once its session is verified against this database — the
+  check gates the handshake, it doesn't happen alongside it.
+- **ScyllaDB** — persisted chat history (one 3-node cluster, not one per
+  replica), written asynchronously off the Redis queue with retry and
+  dead-lettering, so a slow or unreachable Scylla can't stall or lose a
+  live message.
+
+Real-time delivery never waits on persistence: a sent message is
+broadcast to its room immediately, and only then buffered for the
+history write.
+
+The full reasoning — and the alternatives that were considered and
+rejected — lives in the ADRs:
+
+- [Modernize the stack](docs/adr/2026-08-09-modernize-stack.md)
+- [Horizontal scaling](docs/adr/2026-08-09-horizontal-scaling.md)
+- [Authentication](docs/adr/2026-08-09-authentication.md)
+- [Chat history storage](docs/adr/2026-08-11-chat-history-storage.md)
+- [Message queue persistence](docs/adr/2026-08-11-message-queue-persistence.md)
+
+See [`docs/TASK_TRACKER.md`](docs/TASK_TRACKER.md) for what's implemented
+versus still open.
 
 ## 🚀 Quick Start
 
@@ -34,22 +87,30 @@ pnpm install
 
 ### Usage
 
+> [!IMPORTANT]
+> Accounts are mandatory (see Architecture above), so the server needs a
+> real PostgreSQL database and `DATABASE_URL` set even for local dev — a
+> bare `pnpm dev` with no database configured will fail to start. Point
+> `DATABASE_URL` at your own Postgres, or use the full stack below.
+
 ```bash
 pnpm dev
 ```
 
-### Running multiple chat servers behind a load balancer
+### Running the full stack locally
 
-For horizontal scaling (multiple `@chatme/server` instances sharing room
-state via Redis, behind an Nginx load balancer):
+The architecture above — load-balanced servers sharing Redis, Postgres,
+and a 3-node ScyllaDB cluster — is fully reproducible with:
 
 ```bash
 docker compose up --build
 ```
 
-See `docker-compose.yml`, `nginx.conf`, and
-[`docs/adr/2026-08-09-horizontal-scaling.md`](docs/adr/2026-08-09-horizontal-scaling.md)
-for details.
+`docker-compose.yml`'s own top comment has the one-time migration
+commands and how to verify each piece (the load balancer actually
+distributing connections, Scylla's HA story, the message queue draining
+after a simulated Scylla outage). See also `nginx.conf` and the ADRs
+linked above.
 
 ## 📝License
 

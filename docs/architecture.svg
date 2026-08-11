@@ -1,0 +1,102 @@
+<svg viewBox="0 0 1380 780" xmlns="http://www.w3.org/2000/svg" role="img"
+  aria-label="ChatMe architecture: client through a load balancer to three chat server replicas, fanning into a shared Redis, a shared Postgres, and a buffered write into a shared ScyllaDB cluster.">
+  <defs>
+    <marker id="arrowSolid" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#aeb6c2" />
+    </marker>
+    <marker id="arrowGate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#a78bfa" />
+    </marker>
+    <marker id="arrowPipe" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#ef6461" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1380" height="780" fill="#0a0d12" />
+
+  <text x="20" y="30" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace"
+    font-size="12" letter-spacing="1" fill="#8b95a5">ChatMe &#183; system architecture</text>
+
+  <!-- replica group bracket + caption -->
+  <path d="M513,128 V143 M513,128 H705 M705,128 V143" stroke="#262c37" stroke-width="1.5" fill="none" />
+  <text x="609" y="118" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace"
+    font-size="11" fill="#8b95a5">3 replicas &#183; round robin (nginx)</text>
+
+  <!-- edges: client -> lb -->
+  <line x1="182" y1="380" x2="253" y2="380" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+
+  <!-- edges: lb -> chat servers -->
+  <line x1="405" y1="380" x2="513" y2="190" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+  <line x1="405" y1="380" x2="513" y2="380" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+  <line x1="405" y1="380" x2="513" y2="570" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+
+  <!-- edges: chat servers -> redis (fan-in, converge on one point) -->
+  <line x1="705" y1="170" x2="898" y2="142" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+  <line x1="705" y1="380" x2="898" y2="142" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+  <line x1="705" y1="590" x2="898" y2="142" stroke="#aeb6c2" stroke-width="2" marker-end="url(#arrowSolid)" />
+
+  <!-- edges: chat servers -> user db (gate, dashed, converge) -->
+  <line x1="705" y1="210" x2="898" y2="610" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowGate)" />
+  <line x1="705" y1="420" x2="898" y2="610" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowGate)" />
+  <line x1="705" y1="600" x2="898" y2="610" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowGate)" />
+
+  <!-- edge: redis -> history db (buffered pipe, orthogonal - stays in the
+       1040-1133 gap between the two boxes so the final leg approaches the
+       history box's left edge moving rightward, not backward through it) -->
+  <path d="M1040,90 H1090 V380 H1133" stroke="#ef6461" stroke-width="2.5" fill="none" marker-end="url(#arrowPipe)" />
+  <text x="1098" y="86" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#ef6461">buffered write</text>
+  <text x="1098" y="104" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#ef6461">retry + dead-letter</text>
+
+  <!-- node: client -->
+  <circle cx="110" cy="380" r="72" fill="#10141b" stroke="#9aa4b2" stroke-width="2" />
+  <text x="110" y="376" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Client Web</text>
+  <text x="110" y="394" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">vue 3 spa</text>
+
+  <!-- node: load balancer -->
+  <rect x="255" y="335" width="150" height="90" rx="14" fill="#10141b" stroke="#4ec98a" stroke-width="2" />
+  <text x="330" y="374" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Load Balancer</text>
+  <text x="330" y="394" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">nginx</text>
+
+  <!-- node: chat server 1 -->
+  <rect x="515" y="145" width="190" height="90" rx="14" fill="#10141b" stroke="#5b9df9" stroke-width="2" />
+  <text x="610" y="184" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Chat Server</text>
+  <text x="610" y="204" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">node &#183; express &#183; socket.io</text>
+
+  <!-- node: chat server 2 -->
+  <rect x="515" y="335" width="190" height="90" rx="14" fill="#10141b" stroke="#5b9df9" stroke-width="2" />
+  <text x="610" y="374" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Chat Server</text>
+  <text x="610" y="394" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">node &#183; express &#183; socket.io</text>
+
+  <!-- node: chat server 3 -->
+  <rect x="515" y="525" width="190" height="90" rx="14" fill="#10141b" stroke="#5b9df9" stroke-width="2" />
+  <text x="610" y="564" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Chat Server</text>
+  <text x="610" y="584" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">node &#183; express &#183; socket.io</text>
+
+  <!-- node: redis (shared) -->
+  <rect x="820" y="40" width="220" height="102" rx="14" fill="#10141b" stroke="#ef6461" stroke-width="2" />
+  <text x="930" y="80" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Redis (shared)</text>
+  <text x="930" y="100" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">rooms &#183; pub/sub &#183; streams</text>
+  <text x="930" y="118" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">one instance, all replicas</text>
+
+  <!-- node: user db (shared) -->
+  <rect x="820" y="608" width="220" height="102" rx="14" fill="#10141b" stroke="#35c2a4" stroke-width="2" />
+  <text x="930" y="648" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">User DB (shared)</text>
+  <text x="930" y="668" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">postgres &#183; better auth</text>
+  <text x="930" y="686" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">one instance, all replicas</text>
+
+  <!-- node: chat history db (single cluster) -->
+  <rect x="1133" y="325" width="212" height="112" rx="14" fill="#10141b" stroke="#f2a541" stroke-width="2" />
+  <text x="1239" y="365" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="600" font-size="15" fill="#e7eaf0">Chat History DB</text>
+  <text x="1239" y="385" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">scylladb</text>
+  <text x="1239" y="403" text-anchor="middle" font-family="ui-monospace, SF Mono, Cascadia Mono, Consolas, monospace" font-size="11.5" fill="#8b95a5">1 cluster &#183; 3 nodes &#183; rf 3</text>
+
+  <!-- legend -->
+  <line x1="30" y1="748" x2="62" y2="748" stroke="#aeb6c2" stroke-width="2" />
+  <text x="72" y="752" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="12" fill="#8b95a5">data flow</text>
+
+  <line x1="220" y1="748" x2="252" y2="748" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7 6" />
+  <text x="262" y="752" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="12" fill="#8b95a5">auth check &#8212; gates the connection</text>
+
+  <line x1="600" y1="748" x2="632" y2="748" stroke="#ef6461" stroke-width="2.5" />
+  <text x="642" y="752" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="12" fill="#8b95a5">buffered write &#8212; queued, retried, dead-lettered on failure</text>
+</svg>

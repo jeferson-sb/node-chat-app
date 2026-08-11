@@ -1,11 +1,6 @@
 import type { ChatUser } from '../../domain/ChatUser.ts';
 import type { RoomRepository } from './RoomRepository.ts';
 
-/**
- * Single-process room roster, matching SocketController's original
- * in-memory Map/Set. Used when no REDIS_URL is configured (local dev,
- * or a single-node deployment) — see setupSocketServer.
- */
 export class InMemoryRoomRepository implements RoomRepository {
   private readonly usersBySocketId: Map<string, ChatUser> = new Map();
 

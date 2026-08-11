@@ -11,8 +11,6 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
-  // Migrates DATABASE_URL before the webServers below start querying it -
-  // see globalSetup.ts.
   globalSetup: './e2e/globalSetup.ts',
   use: {
     baseURL,

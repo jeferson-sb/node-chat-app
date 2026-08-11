@@ -7,6 +7,8 @@ export type MessageProps = {
 
 export type MessageSnapshot = MessageProps;
 
+export const MAX_TEXT_LENGTH = 100_000;
+
 export class Message {
   #id: string;
   #username: string;
@@ -21,6 +23,12 @@ export class Message {
   }
 
   static from(props: MessageProps): Message {
+    if (props.text.length > MAX_TEXT_LENGTH) {
+      throw new Error(
+        `Message text cannot exceed ${MAX_TEXT_LENGTH} characters`,
+      );
+    }
+
     return new Message(props);
   }
 

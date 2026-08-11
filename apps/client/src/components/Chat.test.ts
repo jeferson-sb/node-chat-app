@@ -135,6 +135,12 @@ describe('Chat', () => {
     ).toBe('')
   })
 
+  it('limits the message input to 100,000 characters', async () => {
+    const wrapper = await mountChat()
+
+    expect(wrapper.find('textarea').attributes('maxlength')).toBe('100000')
+  })
+
   it('disconnects the socket when unmounted', async () => {
     const wrapper = await mountChat()
 

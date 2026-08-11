@@ -52,12 +52,14 @@
 
       <div class="compose">
         <form id="message-form" @submit.prevent="sendMessage">
+          <!-- maxlength must match Message.MAX_TEXT_LENGTH in apps/server/src/domain/Message.ts, the authoritative limit -->
           <textarea
             ref="messageInput"
             v-model="message"
             name="message"
             placeholder="Type your message ..."
             required
+            maxlength="100000"
             autocomplete="off"
             autocorrect="off"
             autocapitalize="off"

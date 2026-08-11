@@ -139,6 +139,18 @@ describe('SocketController', () => {
 
       expect(socketServer.to).not.toHaveBeenCalled();
     });
+
+    it('rejects a message over the length limit without broadcasting it', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+      vi.mocked(socketServer.to).mockClear();
+
+      await expect(
+        controller.onSendMessage(socket, { message: 'a'.repeat(100_001) }),
+      ).rejects.toThrow('Message text cannot exceed 100000 characters');
+
+      expect(socketServer.to).not.toHaveBeenCalled();
+    });
   });
 
   describe('onDisconnect', () => {

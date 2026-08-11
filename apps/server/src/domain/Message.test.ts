@@ -31,4 +31,20 @@ describe('Message', () => {
     expect(message.text).toBe('hi');
     expect(message.createdAt).toBe(42);
   });
+
+  it('accepts text at exactly the 100,000 character limit', () => {
+    const text = 'a'.repeat(100_000);
+
+    expect(() =>
+      Message.from({ id: '3', username: 'alice', text, createdAt: 1 }),
+    ).not.toThrow();
+  });
+
+  it('rejects text longer than 100,000 characters', () => {
+    const text = 'a'.repeat(100_001);
+
+    expect(() =>
+      Message.from({ id: '4', username: 'alice', text, createdAt: 1 }),
+    ).toThrow('Message text cannot exceed 100000 characters');
+  });
 });

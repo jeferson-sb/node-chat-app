@@ -142,9 +142,7 @@ describe('chat flow (integration)', () => {
     const joinMessage = await aliceNotified;
     expect(joinMessage.username).toBe('Server');
     expect(joinMessage.text).toBe('bob has joined the chat!');
-  }, // Two real signups (password hashing is CPU-bound) plus the socket
-  // round trips push this past vitest's 5s default.
-  20_000);
+  }, 20_000); // two real signups (password hashing is CPU-bound) plus the socket round trips push this past vitest's 5s default
 
   it('delivers a sent message to everyone in the room', async () => {
     const alice = await connectAsUser('alice');

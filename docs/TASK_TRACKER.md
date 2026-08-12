@@ -158,10 +158,30 @@ User's can login/signup but there is no way to logout. We should implement a log
 ## Task 8 - Presence
 
 Priority: Medium
-Completed: [ ]
+Completed: [x] Re-keyed the room roster from `socketId` to `(room,
+username)` membership (`RoomRepository`, see
+`apps/server/src/infra/rooms/`) so a disconnect flips an `online` flag
+instead of deleting the record — the sidebar can now show an
+offline indicator instead of losing the user entirely.
+`SocketController.onJoinRoom` broadcasts the "has joined" message only
+when `addUser` reports a first-ever join to that room; `onDisconnect` no
+longer emits a "has left" message at all, only a `roomData` refresh
+reflecting the offline flag. `Chat.vue`'s sidebar renders a colored dot
+plus screen-reader-only "online"/"offline" text per user, styled with
+two new oklch tokens (`--online`/`--offline` in `global.css`) per this
+repo's no-hardcoded-colors convention. Decision and full reasoning in
+docs/adr/2026-08-12-presence-indicators.md.
 
-Instead of showing "User X joined" and "User x left" messages, what about adding a online/offline indicator at the Users chat list/sidebar?
-We only need to show "User X joined" when is the first time the user has joined that room. After that, we should only show the online/offline indicator.
+Tested: `SocketController.test.ts` and `chatFlow.integration.test.ts`
+cover first-join-only broadcasting, a returning user flipping back
+online without a duplicate "has joined" message, and disconnect
+flipping offline without a "has left" message. `e2e/chat.spec.ts`
+covers the same over a real browser + socket.io wire.
+
+Acceptance criteria:
+- [x] Online/offline indicator in the sidebar user list.
+- [x] "User X joined" shown only on a user's first-ever join to a room;
+      subsequent (re)connects only update the online indicator.
 
 ## Task 9 - Individual services (SKIP FOR NOW)
 

@@ -141,7 +141,29 @@ Decision recorded in docs/adr/2026-08-09-authentication.md: Better Auth
 (not Firebase or Auth.js) + PostgreSQL, accounts mandatory (no anonymous
 join).
 
-## Task 6 - Individual services
+## Task 6 - Bootstrap
+
+Priority: Medium
+Completed: [ ]
+
+Right now when we create the app we are instantiating all the services in a single file (createApp.ts). We should have a bootstrap setup that will instantiate all the services and wire them together. This will make it easier to test and maintain the codebase. Use dependency injection whenever possible.
+
+## Task 7 - Logout
+
+Priority: High
+Completed: [ ]
+
+User's can login/signup but there is no way to logout. We should implement a logout functionality and a clean UI so the user can logout from the app and go back in.
+
+## Task 8 - Presence
+
+Priority: Medium
+Completed: [ ]
+
+Instead of showing "User X joined" and "User x left" messages, what about adding a online/offline indicator at the Users chat list/sidebar?
+We only need to show "User X joined" when is the first time the user has joined that room. After that, we should only show the online/offline indicator.
+
+## Task 9 - Individual services (SKIP FOR NOW)
 
 - Chat service (stateful service, provides the websocket connection by facilitating message sending/receiving)
 - Authentication service

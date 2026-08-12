@@ -1,11 +1,59 @@
 name: chatme
 
+# Reference architecture: three stateless @chatme/server instances behind
+# an Nginx load balancer (Task 4, docs/adr/2026-08-09-horizontal-scaling.md),
+# sharing one Redis instance for the room roster and cross-node broadcast,
+# one Postgres for accounts (Task 5, docs/adr/2026-08-09-authentication.md),
+# and one 3-node ScyllaDB cluster for chat history (Task 2,
+# docs/adr/2026-08-11-chat-history-storage.md), written to via a Redis
+# Streams queue rather than directly (Task 3,
+# docs/adr/2026-08-11-message-queue-persistence.md). See
+# docs/architecture.svg for the full picture.
+#
+# BETTER_AUTH_SECRET must be set before `docker compose up` - it has no
+# default (unlike BETTER_AUTH_URL/CLIENT_APP_URL below), and Better Auth
+# refuses to boot without a real one. Put it in a root .env file (already
+# covered by .gitignore, so it won't get committed) rather than exporting
+# it every time:
+#   echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" > .env
+# Skipping this crashes all three server replicas on startup, which shows
+# up as Nginx returning 502 on every request (nothing healthy to proxy
+# to) - `docker compose logs server1` is where that actually surfaces.
+#
 # Usage:
 #   docker compose up --build
+#   DATABASE_URL=postgres://postgres:postgres@localhost:5432/chatme pnpm --filter @chatme/server run db:migrate:auth
 #   SCYLLA_CONTACT_POINTS=localhost pnpm --filter @chatme/server run db:migrate:scylla
-#   pnpm --filter @chatme/client dev -- --port 5300   # in another terminal
-#   VITE_SOCKET_URL=http://localhost:8080 (Nginx), see apps/client/.env.example
+#   VITE_SOCKET_URL=http://localhost:8080 pnpm --filter @chatme/client run dev   # in another terminal
 #
+# Runs on Vite's own default port (5173) - `pnpm --filter ... run dev --
+# --port` looks like it should override that, but the `--` gets forwarded
+# to Vite literally instead of being stripped (a pnpm/--filter quirk), so
+# the port flag is silently ignored. Use `pnpm --filter ... exec vite
+# --port <n>` instead if you actually need a non-default port (e.g. to
+# run two clients side by side).
+#
+# Both migration commands are one-time (idempotent to re-run) - accounts
+# (Better Auth/Postgres) and chat history (Scylla) each need their schema
+# created before the app can use them; nothing in the images runs these
+# automatically on boot.
+#
+# Verify the load balancer is actually distributing connections, and that
+# users on different nodes can see/message each other, by opening two
+# browser tabs on the same room and checking `docker compose logs -f` for
+# "new socket connected" lines split across server1/server2/server3.
+#
+# Verify Scylla's HA story specifically: `docker compose stop scylla2`
+# mid-conversation - writes/reads keep working (replication factor 3,
+# only one of three nodes down), unlike a single-instance store where
+# that would be an outage.
+#
+# Verify the message queue specifically: `docker compose stop scylla1
+# scylla2 scylla3` mid-conversation - live chat keeps working (broadcast
+# never touched the queue), sent messages queue up in Redis
+# (`redis-cli XLEN chatme:messages:pending`), then bring Scylla back up
+# and watch the backlog drain (`XLEN` falling back toward 0) without
+# restarting any server replica.
 
 services:
   redis:
@@ -83,7 +131,7 @@ services:
       SCYLLA_CONTACT_POINTS: scylla1,scylla2,scylla3
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8080}
-      CLIENT_APP_URL: ${CLIENT_APP_URL:-http://localhost:5300}
+      CLIENT_APP_URL: ${CLIENT_APP_URL:-http://localhost:5173}
     depends_on:
       redis:
         condition: service_healthy

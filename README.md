@@ -100,13 +100,34 @@ pnpm dev
 ### Running the full stack locally
 
 The architecture above — load-balanced servers sharing Redis, Postgres,
-and a 3-node ScyllaDB cluster — is fully reproducible with:
+and a 3-node ScyllaDB cluster — is fully reproducible locally. Docker
+Compose only covers the backend (`server1/2/3`, Redis, Postgres, Scylla,
+Nginx) — the client is a separate step, run against Nginx rather than
+any single replica:
 
 ```bash
+echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" > .env
 docker compose up --build
+
+# one-time, once the stack is healthy (idempotent to re-run):
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/chatme pnpm --filter @chatme/server run db:migrate:auth
+SCYLLA_CONTACT_POINTS=localhost pnpm --filter @chatme/server run db:migrate:scylla
+
+# in another terminal:
+VITE_SOCKET_URL=http://localhost:8080 pnpm --filter @chatme/client run dev
 ```
 
-`docker-compose.yml`'s own top comment has the one-time migration
+Then open `http://localhost:5173` (Vite's own default port — `CLIENT_APP_URL`
+above is what the server checks the request's origin against, so the two
+need to agree if you ever change one).
+
+> [!IMPORTANT]
+> `BETTER_AUTH_SECRET` has no default — skip it and all three server
+> replicas crash on startup, which shows up as Nginx returning a 502 on
+> every request. `docker compose logs server1` is where that actually
+> surfaces. The `.env` file above is already covered by `.gitignore`.
+
+`docker-compose.yml`'s own top comment has more detail on the migration
 commands and how to verify each piece (the load balancer actually
 distributing connections, Scylla's HA story, the message queue draining
 after a simulated Scylla outage). See also `nginx.conf` and the ADRs

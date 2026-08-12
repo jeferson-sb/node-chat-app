@@ -9,7 +9,12 @@ TBD
 
 ## Build, Lint, Format, and Test Commands
 
-TBD
+| Command | Description |
+|---------|-------------|
+| pnpm run build | TBD |
+| pnpm run lint | TBD |
+| pnpm run fmt | TBD |
+| pnpm run test | TBD |
 
 ## TypeScript/JavaScript
 
@@ -21,6 +26,22 @@ TBD
 - If a type already exists as a named, exported type, import and reuse it instead of re-deriving it with `Parameters<typeof fn>[0]['field']`, `ReturnType<typeof fn>`, or similar utility-type gymnastics against another function/component's signature. Prefer duplicating a small inline type over deriving from an unrelated function if no shared type exists yet — but exporting and importing the real type is the preferred fix.
 - Avoid multiple if clauses and nested ternaries; prefer early returns and guard clauses for better readability.
 - Function parameters cannot be more than 3, and if they are, consider refactoring to use an options object or breaking the function into smaller ones.
+- Avoid barrel files (index.ts) for exports, as they can lead to circular dependencies and make it harder to trace where a type or function is coming from. Instead, export types and functions directly from their respective files.
+
+## CSS/UI styles
+- Use CSS nesting whenever possible, but avoid deep nesting (more than 3 levels) to maintain readability and prevent overly specific selectors.
+- Use container queries to handle responsive design on components.
+- Reuse values with custom properties (CSS variables) to maintain consistency and make it easier to update styles across the app.
+- Never use hardcoded colors, use tokens and preferably oklch values.
+- Avoid using !important to override styles, instead use specificity and cascade layers (@layer)
+- Prefer gap over margin for spacing between elements in flex and grid layouts.
+- RTL/LTR Support: Always use logical properties (e.g., margin-inline-start, padding-block-end) instead of physical properties (e.g., margin-left, padding-bottom) to ensure proper support for both left-to-right and right-to-left languages.
+- Prefer rem units for font sizes and spacing.
+- Use the `:is()` CSS pseudo-class to group selectors that share the same styles, reducing redundancy and improving maintainability.
+- Avoid animation the `all` property, instead focus on individual properties you use to animate.
+- Animate performant properties like `transform` (or individual scale, rotate, translate)  and `opacity` to ensure smooth animations without causing layout thrashing or jank.
+- Use the min(), max(), and clamp() CSS functions to handle adaptive designs, such as `.container` classes that need to be responsive but also have a max width.
+
 
 ## Code Style
 

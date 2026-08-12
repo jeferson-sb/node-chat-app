@@ -1,31 +1,14 @@
 import http from 'node:http';
 import express, { type ErrorRequestHandler } from 'express';
 import morgan from 'morgan';
-import { Pool } from 'pg';
-import { Client as ScyllaClient } from 'cassandra-driver';
 import { toNodeHandler } from 'better-auth/node';
-import { createAdapter } from '@socket.io/redis-adapter';
-import type { Namespace } from 'socket.io';
-import type { Adapter } from 'socket.io-adapter';
 
 import { setupSocketServer } from './websocket.ts';
 import config from '../config/index.ts';
 import HTTPError from '../infra/errors/HTTPError.ts';
-import { createAuth, type AuthDatabase } from '../infra/auth/createAuth.ts';
+import { createAuth } from '../infra/auth/createAuth.ts';
 import { requireAuthenticatedSocket } from './socketAuth.ts';
-import { createRedisClient } from '../infra/redis/createRedisClient.ts';
-import { InMemoryRoomRepository } from '../infra/rooms/InMemoryRoomRepository.ts';
-import { RedisRoomRepository } from '../infra/rooms/RedisRoomRepository.ts';
-import type { RoomRepository } from '../infra/rooms/RoomRepository.ts';
-import { InMemoryMessageHistoryRepository } from '../infra/history/InMemoryMessageHistoryRepository.ts';
-import { ScyllaMessageHistoryRepository } from '../infra/history/ScyllaMessageHistoryRepository.ts';
-import type { MessageHistoryRepository } from '../infra/history/MessageHistoryRepository.ts';
-import { InMemoryMessageQueue } from '../infra/queue/InMemoryMessageQueue.ts';
-import { RedisMessageQueue } from '../infra/queue/RedisMessageQueue.ts';
-import { RedisConsumerStream } from '../infra/queue/RedisConsumerStream.ts';
-import { MessagePersistenceConsumer } from '../infra/queue/MessagePersistenceConsumer.ts';
-import { RedisMessagePersistenceRunner } from '../infra/queue/RedisMessagePersistenceRunner.ts';
-import type { MessageQueue } from '../infra/queue/MessageQueue.ts';
+import { bootstrap, type BootstrapDeps } from '../bootstrap.ts';
 
 // TODO: Extract to use case
 import SocketController, {
@@ -37,176 +20,25 @@ export type App = {
   app: express.Express;
   httpServer: http.Server;
   controller: SocketController;
-  /**
-   * Closes any Redis connections opened for this app (no-op if REDIS_URL
-   * wasn't set), the auth database pool (no-op if authDatabase was
-   * injected — its lifecycle then belongs to the caller), and the Scylla
-   * client (no-op if SCYLLA_CONTACT_POINTS wasn't set).
-   */
+  /** Closes whatever real connections bootstrap.ts opened for this app. */
   close: () => Promise<void>;
 };
 
-export type CreateAppDeps = {
-  /**
-   * Injection seam for tests: pass a Kysely dialect (e.g. kysely-pglite-dialect)
-   * to run against an in-process database instead of a real Postgres pool.
-   * Defaults to a pg.Pool built from config.databaseUrl.
-   */
-  authDatabase?: AuthDatabase;
-};
-
-type RoomsSetup = {
-  rooms: RoomRepository;
-  adapter?: (nsp: Namespace) => Adapter;
-  close: () => Promise<void>;
-};
-
-/**
- * Picks the room roster store and, when REDIS_URL is configured, the
- * socket.io adapter needed to broadcast across server nodes. Without
- * REDIS_URL, both fall back to single-process, in-memory behavior — the
- * app still works standalone (e.g. local dev, a single Fly.io machine),
- * it just can't be scaled horizontally behind a load balancer. See
- * docker-compose.yml for a multi-node setup using both.
- */
-const setupRooms = (): RoomsSetup => {
-  if (!config.redisUrl) {
-    return { rooms: new InMemoryRoomRepository(), close: async () => {} };
-  }
-
-  const roomsClient = createRedisClient(config.redisUrl);
-  const pubClient = createRedisClient(config.redisUrl);
-  const subClient = pubClient.duplicate();
-
-  return {
-    rooms: new RedisRoomRepository(roomsClient),
-    adapter: createAdapter(pubClient, subClient),
-    close: async () => {
-      roomsClient.disconnect();
-      pubClient.disconnect();
-      subClient.disconnect();
-    },
-  };
-};
-
-type AuthSetup = {
-  database: AuthDatabase;
-  close: () => Promise<void>;
-};
-
-/**
- * Accounts are mandatory (docs/adr/2026-08-09-authentication.md), so unlike
- * REDIS_URL there's no in-memory fallback here — a missing DATABASE_URL is a
- * misconfiguration and should fail loudly at startup rather than silently
- * running without auth. When a database is injected (tests), its lifecycle
- * belongs to the caller, so close() is a no-op.
- */
-const setupAuthDatabase = (authDatabase?: AuthDatabase): AuthSetup => {
-  if (authDatabase) {
-    return { database: authDatabase, close: async () => {} };
-  }
-
-  if (!config.databaseUrl) {
-    throw new Error('DATABASE_URL is required to start the server');
-  }
-
-  const pool = new Pool({ connectionString: config.databaseUrl });
-  return { database: pool, close: () => pool.end() };
-};
-
-type MessageHistorySetup = {
-  messageHistory: MessageHistoryRepository;
-  close: () => Promise<void>;
-};
-
-/**
- * Picks the chat history store. Without SCYLLA_CONTACT_POINTS, falls
- * back to single-process in-memory history — same graceful-degrade
- * pattern as setupRooms/REDIS_URL (see
- * docs/adr/2026-08-11-chat-history-storage.md).
- */
-const setupMessageHistory = (): MessageHistorySetup => {
-  if (!config.scyllaContactPoints) {
-    return {
-      messageHistory: new InMemoryMessageHistoryRepository(),
-      close: async () => {},
-    };
-  }
-
-  const client = new ScyllaClient({
-    contactPoints: config.scyllaContactPoints,
-    localDataCenter: config.scyllaLocalDataCenter,
-    keyspace: 'chatme',
-  });
-
-  return {
-    messageHistory: new ScyllaMessageHistoryRepository(client),
-    close: () => client.shutdown(),
-  };
-};
-
-type MessageQueueSetup = {
-  messageQueue: MessageQueue;
-  close: () => Promise<void>;
-};
-
-/**
- * Picks the send-message persistence buffer. Without REDIS_URL, falls
- * back to writing directly and synchronously to messageHistory - same
- * graceful-degrade pattern as setupRooms/setupMessageHistory (a single
- * process has no cross-node write to buffer against). With REDIS_URL, a
- * consumer group runner starts in-process, sharing the group with every
- * other replica, so any of them can persist any pending entry (see
- * docs/adr/2026-08-11-message-queue-persistence.md).
- */
-const setupMessageQueue = (
-  messageHistory: MessageHistoryRepository,
-): MessageQueueSetup => {
-  if (!config.redisUrl) {
-    return {
-      messageQueue: new InMemoryMessageQueue(messageHistory),
-      close: async () => {},
-    };
-  }
-
-  const producerClient = createRedisClient(config.redisUrl);
-  const consumerReadClient = createRedisClient(config.redisUrl);
-
-  const consumer = new MessagePersistenceConsumer({
-    messageHistory,
-    stream: new RedisConsumerStream(producerClient),
-  });
-  const runner = new RedisMessagePersistenceRunner(
-    consumerReadClient,
-    consumer,
-  );
-  const started = runner.start().catch(console.error);
-
-  return {
-    messageQueue: new RedisMessageQueue(producerClient),
-    close: async () => {
-      await started;
-      await runner.stop();
-      producerClient.disconnect();
-      consumerReadClient.disconnect();
-    },
-  };
-};
+export type CreateAppDeps = BootstrapDeps;
 
 /**
  * Wires up the Express app, HTTP server, and Socket.io server without
  * starting to listen. Extracted from the server entrypoint so integration
  * tests can bind to an ephemeral port instead of the configured one.
+ * Service instantiation itself lives in bootstrap.ts - this only wires
+ * already-resolved services into Express/Socket.io (docs/TASK_TRACKER.md
+ * Task 6).
  */
-export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
+export const createApp = (deps: CreateAppDeps = {}): App => {
   const app = express();
   const httpServer = http.createServer(app);
-  const { rooms, adapter, close: closeRooms } = setupRooms();
-  const { database, close: closeAuthDatabase } =
-    setupAuthDatabase(authDatabase);
-  const { messageHistory, close: closeMessageHistory } = setupMessageHistory();
-  const { messageQueue, close: closeMessageQueue } =
-    setupMessageQueue(messageHistory);
+  const { rooms, adapter, database, messageHistory, messageQueue, close } =
+    bootstrap(deps);
   const socketServer = setupSocketServer(httpServer, { adapter });
   const controller = new SocketController({
     socketServer,
@@ -280,13 +112,6 @@ export const createApp = ({ authDatabase }: CreateAppDeps = {}): App => {
   };
 
   app.use(errorHandler);
-
-  const close = async (): Promise<void> => {
-    await closeRooms();
-    await closeAuthDatabase();
-    await closeMessageHistory();
-    await closeMessageQueue();
-  };
 
   return { app, httpServer, controller, close };
 };

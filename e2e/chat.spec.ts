@@ -73,26 +73,64 @@ test('two users can exchange messages in the same room', async ({
   await bobContext.close();
 });
 
-test('the room is notified when a participant disconnects', async ({
+test('the sidebar flips a participant to offline on disconnect, without a "has left" message', async ({
   browser,
 }, testInfo) => {
   const room = `general-${testInfo.workerIndex}`;
+  const bobName = `bob-${testInfo.workerIndex}`;
   const aliceContext = await browser.newContext();
   const bobContext = await browser.newContext();
   const alicePage = await aliceContext.newPage();
   const bobPage = await bobContext.newPage();
 
   await signUpAndJoinRoom(alicePage, `alice-${testInfo.workerIndex}`, room);
-  await signUpAndJoinRoom(bobPage, `bob-${testInfo.workerIndex}`, room);
+  await signUpAndJoinRoom(bobPage, bobName, room);
   await expect(
-    alicePage.getByText(`bob-${testInfo.workerIndex} has joined the chat!`),
+    alicePage.getByText(`${bobName} has joined the chat!`),
   ).toBeVisible();
+  const bobSidebarEntry = alicePage
+    .locator('.chat__sidebar .users li')
+    .filter({ hasText: bobName });
+  await expect(bobSidebarEntry).toContainText('online');
 
   await bobContext.close();
 
-  await expect(
-    alicePage.getByText(`bob-${testInfo.workerIndex} has left the chat!`),
-  ).toBeVisible();
+  await expect(bobSidebarEntry).toContainText('offline');
+  await expect(alicePage.getByText(`${bobName} has left the chat!`)).toHaveCount(
+    0,
+  );
 
   await aliceContext.close();
+});
+
+test('a returning user does not trigger a second "has joined" message', async ({
+  browser,
+}, testInfo) => {
+  const room = `general-${testInfo.workerIndex}`;
+  const bobName = `bob-${testInfo.workerIndex}`;
+  const aliceContext = await browser.newContext();
+  const bobContext = await browser.newContext();
+  const alicePage = await aliceContext.newPage();
+  const bobPage = await bobContext.newPage();
+
+  await signUpAndJoinRoom(alicePage, `alice-${testInfo.workerIndex}`, room);
+  await signUpAndJoinRoom(bobPage, bobName, room);
+  await expect(
+    alicePage.getByText(`${bobName} has joined the chat!`),
+  ).toBeVisible();
+
+  // Bob leaves and comes straight back to the same room - this is a
+  // returning user, so only the sidebar's online indicator should update,
+  // no second "has joined" message (docs/adr/2026-08-12-presence-indicators.md).
+  await bobPage.goto(`/chat/${room}`);
+  const bobSidebarEntry = alicePage
+    .locator('.chat__sidebar .users li')
+    .filter({ hasText: bobName });
+  await expect(bobSidebarEntry).toContainText('online');
+  await expect(
+    alicePage.getByText(`${bobName} has joined the chat!`),
+  ).toHaveCount(1);
+
+  await aliceContext.close();
+  await bobContext.close();
 });

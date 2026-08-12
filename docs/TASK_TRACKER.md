@@ -151,9 +151,42 @@ Right now when we create the app we are instantiating all the services in a sing
 ## Task 7 - Logout
 
 Priority: High
-Completed: [ ]
+Completed: [x] Added `LogoutButton.vue` (`apps/client/src/components/`),
+rendered in `Chat.vue`'s sidebar — logout is only offered once the user
+has actually entered a room, not from the room picker. Styled with the
+same brand tokens (`--purple`/`--light-purple`) as the app's other
+primary buttons, pinned to the bottom of the sidebar. On click it calls
+the existing `authClient.signOut()` (Better Auth's Vue client, already
+used for `signIn`/`signUp`/`getSession`), then `router.push('/')` on
+success, or shows an inline error without navigating on failure.
 
-User's can login/signup but there is no way to logout. We should implement a logout functionality and a clean UI so the user can logout from the app and go back in.
+No new server code was needed — Better Auth's `POST /api/auth/sign-out`
+was already live via the existing `app.all('/api/auth/*splat', ...)`
+mount in `createApp.ts`. Socket cleanup is likewise free: the socket is
+a variable local to `Chat.vue` (not a shared service), so navigating
+away from `/chat/:room` on logout unmounts `Chat.vue`, which already
+calls `socket.disconnect()` in its existing `onBeforeUnmount` — no new
+socket-service abstraction was introduced.
+
+Tested: `LogoutButton.test.ts` covers all three click behaviors (calls
+signOut, redirects on success, shows error and stays put on failure).
+`Chat.test.ts` and `RoomPicker.test.ts` each got a light integration
+check that the control renders. `auth.integration.test.ts` gained a new
+case hitting the real `POST /api/auth/sign-out` endpoint and confirming
+`GET /api/auth/get-session` returns null afterward with the same
+cookie. Manually verified end-to-end in a browser: sign up → logout →
+redirected to `/` → navigating directly back to `/room` bounces to `/`
+again, confirming the session was actually invalidated server-side, not
+just a client-side redirect.
+
+Known gap, addressed: `socketAuth.ts` used to only check the session
+cookie once, at connect time — if a tab was logged out but its socket
+stayed open (e.g. logout triggered from a different tab), that
+connection wasn't proactively dropped by the server. Now
+`requireAuthenticatedSocket` re-verifies the same session every 30s
+(configurable via `sessionCheckIntervalMs`) for as long as the socket
+stays open, and calls `socket.disconnect(true)` the moment the session
+comes back invalid.
 
 ## Task 8 - Presence
 

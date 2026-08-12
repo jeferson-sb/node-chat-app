@@ -117,6 +117,33 @@ describe('auth (integration)', () => {
     expect(response.status).toBe(401);
   });
 
+  it('logs out and invalidates the session cookie', async () => {
+    await signUp({
+      name: 'Erin',
+      email: 'erin@example.com',
+      password: 'correct-password',
+    });
+
+    const signInResponse = await signIn({
+      email: 'erin@example.com',
+      password: 'correct-password',
+    });
+    const cookie = signInResponse.headers.get('set-cookie') ?? '';
+
+    const signOutResponse = await fetch(`${baseUrl}/api/auth/sign-out`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+    expect(signOutResponse.status).toBe(200);
+
+    const sessionAfterSignOut = await fetch(`${baseUrl}/api/auth/get-session`, {
+      headers: { Cookie: cookie },
+    });
+    const body = await sessionAfterSignOut.json();
+
+    expect(body).toBeNull();
+  });
+
   it('allows credentialed cross-origin requests from the configured client', async () => {
     const response = await fetch(`${baseUrl}/api/auth/sign-in/email`, {
       method: 'POST',

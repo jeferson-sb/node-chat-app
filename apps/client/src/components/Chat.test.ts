@@ -48,6 +48,7 @@ vi.mock('../services/auth', () => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { room: 'general' } }),
+  useRouter: () => ({ push: vi.fn() }),
 }))
 
 const mountChat = async () => {
@@ -159,6 +160,12 @@ describe('Chat', () => {
     const wrapper = await mountChat()
 
     expect(wrapper.find('textarea').attributes('maxlength')).toBe('100000')
+  })
+
+  it('renders a logout control', async () => {
+    const wrapper = await mountChat()
+
+    expect(wrapper.find('.chat__sidebar button').text()).toBe('Log out')
   })
 
   it('disconnects the socket when unmounted', async () => {

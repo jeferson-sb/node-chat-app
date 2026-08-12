@@ -7,6 +7,7 @@
   --gray: #8e9297;
   --purple: #6b47b8;
   --light-purple: #8f64ec;
+  --error: oklch(76% 0.15 28);
   --body-font: 'Roboto', Helvetica, Arial, sans-serif;
 }
 

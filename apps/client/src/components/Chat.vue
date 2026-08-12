@@ -25,6 +25,7 @@
           {{ user.username }}
         </li>
       </ul>
+      <LogoutButton />
     </aside>
     <div class="chat__main">
       <div id="messages" ref="messagesContainer" class="chat__messages">
@@ -79,6 +80,7 @@ import { io, type Socket } from 'socket.io-client'
 import notify from '../services/notify'
 import { authClient } from '../services/auth'
 import { useAutoScroll } from '../composables/useAutoScroll'
+import LogoutButton from './LogoutButton.vue'
 
 type ChatUser = {
   username: string
@@ -183,8 +185,14 @@ const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
 
 .chat__sidebar {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
   color: var(--white);
   background: var(--bg-color);
+}
+
+.chat__sidebar :deep(.logout-button) {
+  margin-top: auto;
 }
 
 header {

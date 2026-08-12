@@ -123,7 +123,7 @@ const onSuccess = (): void => {
 }
 
 .centered-form :deep(.auth-form__error) {
-  color: #ff8a8a;
+  color: var(--error);
   font-size: 14px;
   margin-top: -8px;
   margin-bottom: 16px;

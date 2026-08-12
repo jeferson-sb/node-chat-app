@@ -8,8 +8,16 @@
             {{ room }}
           </button>
           <ul :class="['users', isActive ? 'show' : '']">
-            <li v-for="user in users" :key="user.socketId">
+            <li
+              v-for="user in users"
+              :key="user.socketId"
+              :class="['user', user.online ? 'user--online' : 'user--offline']"
+            >
+              <span class="user__status" aria-hidden="true"></span>
               {{ user.username }}
+              <span class="sr-only">{{
+                user.online ? 'online' : 'offline'
+              }}</span>
             </li>
           </ul>
         </div>
@@ -21,8 +29,14 @@
       </h2>
       <h3 class="list-title">Users</h3>
       <ul class="users">
-        <li v-for="user in users" :key="user.socketId">
+        <li
+          v-for="user in users"
+          :key="user.socketId"
+          :class="['user', user.online ? 'user--online' : 'user--offline']"
+        >
+          <span class="user__status" aria-hidden="true"></span>
           {{ user.username }}
+          <span class="sr-only">{{ user.online ? 'online' : 'offline' }}</span>
         </li>
       </ul>
       <LogoutButton />
@@ -86,6 +100,7 @@ type ChatUser = {
   username: string
   room: string
   socketId: string
+  online: boolean
 }
 
 type ChatMessage = {
@@ -353,6 +368,39 @@ header {
 .users li {
   padding: 12px 12px 12px 25px;
   background-color: var(--dark);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user__status {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background-color: var(--offline);
+  flex-shrink: 0;
+}
+
+.user--online .user__status {
+  background-color: var(--online);
+}
+
+/* Visually hidden but still available to screen readers - the dot alone
+   isn't enough to convey online/offline. */
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin-inline: -1px;
+  margin-block: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media screen and (max-width: 500px) {

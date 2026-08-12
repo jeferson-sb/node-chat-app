@@ -14,7 +14,12 @@ type ChatMessage = {
 
 type RoomData = {
   room: string;
-  users: { username: string; room: string; socketId: string }[];
+  users: {
+    username: string;
+    room: string;
+    socketId: string;
+    online: boolean;
+  }[];
 };
 
 /**
@@ -41,6 +46,14 @@ type RoomData = {
  * simply delayed, not lost (confirmed via the connect/disconnect logs;
  * InMemoryRoomRepository is synchronous, so it isn't the cause). Passes
  * reliably in isolation or on an otherwise-idle machine.
+ *
+ * Room roster state is now shared across this whole file (one `app`,
+ * built once in beforeAll), and room membership persists across
+ * disconnects (docs/adr/2026-08-12-presence-indicators.md) rather than
+ * being cleared - so each test that cares about "is this a first-ever
+ * join" behavior uses its own unique room name via uniqueRoom() below,
+ * to avoid one test's leftover membership silently changing another
+ * test's expected first-join outcome.
  */
 describe('chat flow (integration)', () => {
   let app: App;
@@ -99,6 +112,8 @@ describe('chat flow (integration)', () => {
   const waitForEvent = <T>(socket: ClientSocket, event: string): Promise<T> =>
     new Promise((resolve) => socket.once(event, resolve));
 
+  const uniqueRoom = (): string => `general-${crypto.randomUUID()}`;
+
   it('rejects a connection without a valid session', async () => {
     const client = ioClient(baseUrl, {
       forceNew: true,
@@ -114,11 +129,12 @@ describe('chat flow (integration)', () => {
   });
 
   it('welcomes a joining user and broadcasts roomData', async () => {
+    const room = uniqueRoom();
     const alice = await connectAsUser('alice');
 
     const welcomePromise = waitForEvent<ChatMessage>(alice, eventTypes.message);
     const roomDataPromise = waitForEvent<RoomData>(alice, eventTypes.roomData);
-    alice.emit(eventTypes.join, { room: 'general' });
+    alice.emit(eventTypes.join, { room });
 
     const welcome = await welcomePromise;
     const roomData = await roomDataPromise;
@@ -126,18 +142,19 @@ describe('chat flow (integration)', () => {
     expect(welcome.username).toBe('Admin');
     expect(welcome.text).toContain('alice');
     expect(roomData.users).toEqual([
-      { username: 'alice', room: 'general', socketId: alice.id },
+      { username: 'alice', room, socketId: alice.id, online: true },
     ]);
   });
 
   it('notifies existing room members when someone else joins', async () => {
+    const room = uniqueRoom();
     const alice = await connectAsUser('alice');
-    alice.emit(eventTypes.join, { room: 'general' });
+    alice.emit(eventTypes.join, { room });
     await waitForEvent(alice, eventTypes.roomData);
 
     const bob = await connectAsUser('bob');
     const aliceNotified = waitForEvent<ChatMessage>(alice, eventTypes.message);
-    bob.emit(eventTypes.join, { room: 'general' });
+    bob.emit(eventTypes.join, { room });
 
     const joinMessage = await aliceNotified;
     expect(joinMessage.username).toBe('Server');
@@ -145,12 +162,13 @@ describe('chat flow (integration)', () => {
   }, 20_000); // two real signups (password hashing is CPU-bound) plus the socket round trips push this past vitest's 5s default
 
   it('delivers a sent message to everyone in the room', async () => {
+    const room = uniqueRoom();
     const alice = await connectAsUser('alice');
-    alice.emit(eventTypes.join, { room: 'general' });
+    alice.emit(eventTypes.join, { room });
     await waitForEvent(alice, eventTypes.roomData);
 
     const bob = await connectAsUser('bob');
-    bob.emit(eventTypes.join, { room: 'general' });
+    bob.emit(eventTypes.join, { room });
     await waitForEvent(bob, eventTypes.roomData);
     await waitForEvent(alice, eventTypes.message); // consume bob's join notice
 
@@ -161,25 +179,65 @@ describe('chat flow (integration)', () => {
     expect(received).toMatchObject({ username: 'alice', text: 'hello bob' });
   }, 20_000);
 
-  it('notifies the room and updates roomData when a user disconnects', async () => {
+  it('marks a disconnected user offline in roomData instead of sending a "has left" message', async () => {
+    const room = uniqueRoom();
     const alice = await connectAsUser('alice');
-    alice.emit(eventTypes.join, { room: 'general' });
+    alice.emit(eventTypes.join, { room });
     await waitForEvent(alice, eventTypes.roomData);
 
     const bob = await connectAsUser('bob');
-    bob.emit(eventTypes.join, { room: 'general' });
+    bob.emit(eventTypes.join, { room });
     await waitForEvent(bob, eventTypes.roomData);
     await waitForEvent(alice, eventTypes.message); // consume bob's join notice
 
-    const aliceNotified = waitForEvent<ChatMessage>(alice, eventTypes.message);
+    // No "has left" message is ever emitted (docs/adr/2026-08-12-presence-
+    // indicators.md) - a message event landing here before roomData would
+    // fail this assertion.
+    const unexpectedMessage = (msg: ChatMessage) => {
+      throw new Error(`unexpected message event: ${JSON.stringify(msg)}`);
+    };
+    alice.once(eventTypes.message, unexpectedMessage);
     const roomDataUpdated = waitForEvent<RoomData>(alice, eventTypes.roomData);
     bob.disconnect();
 
-    const leaveMessage = await aliceNotified;
     const roomData = await roomDataUpdated;
-    expect(leaveMessage.text).toBe('bob has left the chat!');
+    alice.off(eventTypes.message, unexpectedMessage);
+    expect(roomData.users).toEqual(
+      expect.arrayContaining([
+        { username: 'alice', room, socketId: alice.id, online: true },
+        expect.objectContaining({ username: 'bob', online: false }),
+      ]),
+    );
+  }, 20_000);
+
+  it('does not send a "has joined" message when a returning user rejoins a room', async () => {
+    const room = uniqueRoom();
+    const alice = await connectAsUser('alice');
+    alice.emit(eventTypes.join, { room });
+    await waitForEvent(alice, eventTypes.roomData);
+    alice.disconnect();
+
+    const aliceAgain = await connectAsUser('alice');
+    const unexpectedMessage = (msg: ChatMessage) => {
+      throw new Error(`unexpected message event: ${JSON.stringify(msg)}`);
+    };
+    aliceAgain.once(eventTypes.message, (msg: ChatMessage) => {
+      if (msg.username === 'Server') unexpectedMessage(msg);
+    });
+    const roomDataPromise = waitForEvent<RoomData>(
+      aliceAgain,
+      eventTypes.roomData,
+    );
+    aliceAgain.emit(eventTypes.join, { room });
+
+    const roomData = await roomDataPromise;
     expect(roomData.users).toEqual([
-      { username: 'alice', room: 'general', socketId: alice.id },
+      {
+        username: 'alice',
+        room,
+        socketId: aliceAgain.id,
+        online: true,
+      },
     ]);
   }, 20_000);
 });

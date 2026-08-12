@@ -9,6 +9,10 @@
   --light-purple: #8f64ec;
   --error: oklch(76% 0.15 28);
   --body-font: 'Roboto', Helvetica, Arial, sans-serif;
+  /* Presence indicator (Chat.vue sidebar) - oklch per this repo's
+     color-token convention for new styles. */
+  --online: oklch(72% 0.19 149);
+  --offline: oklch(55% 0.01 149);
 }
 
 /* To style the document scrollbar, remove `.custom-scrollbar` */

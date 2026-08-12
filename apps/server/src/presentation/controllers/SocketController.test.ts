@@ -103,9 +103,49 @@ describe('SocketController', () => {
         eventTypes.roomData,
         expect.objectContaining({
           room: 'general',
-          users: [{ username: 'alice', room: 'general', socketId: 'socket-1' }],
+          users: [
+            {
+              username: 'alice',
+              room: 'general',
+              socketId: 'socket-1',
+              online: true,
+            },
+          ],
         }),
       );
+    });
+
+    it('does not broadcast a join message when a returning user rejoins the room', async () => {
+      const firstConnection = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(firstConnection, { room: 'general' });
+      await controller.onDisconnect(firstConnection);
+
+      const secondConnection = createMockSocket('socket-2', 'alice');
+      await controller.onJoinRoom(secondConnection, { room: 'general' });
+
+      const roomEmitter = secondConnection.to('general');
+      expect(roomEmitter.emit).not.toHaveBeenCalledWith(
+        eventTypes.message,
+        expect.objectContaining({ text: expect.stringContaining('joined') }),
+      );
+    });
+
+    it('marks a returning user online again in roomData', async () => {
+      const firstConnection = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(firstConnection, { room: 'general' });
+      await controller.onDisconnect(firstConnection);
+
+      const secondConnection = createMockSocket('socket-2', 'alice');
+      await controller.onJoinRoom(secondConnection, { room: 'general' });
+
+      expect(await controller.getUsersOnRoom('general')).toEqual([
+        {
+          username: 'alice',
+          room: 'general',
+          socketId: 'socket-2',
+          online: true,
+        },
+      ]);
     });
 
     it('tracks multiple users joining the same room', async () => {
@@ -230,20 +270,43 @@ describe('SocketController', () => {
   });
 
   describe('onDisconnect', () => {
-    it('removes the user and broadcasts they left', async () => {
+    it('marks the user offline without a "has left" message', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+      // onDisconnect no longer talks to socket.to(...) at all (it has no
+      // "has left" message to send) - only socketServer.to(...) for the
+      // roomData refresh, asserted separately below.
+      vi.mocked(socket.to).mockClear();
+
+      await controller.onDisconnect(socket);
+
+      expect(await controller.getUsersOnRoom('general')).toEqual([
+        {
+          username: 'alice',
+          room: 'general',
+          socketId: 'socket-1',
+          online: false,
+        },
+      ]);
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it('broadcasts updated roomData reflecting the offline user', async () => {
       const socket = createMockSocket('socket-1', 'alice');
       await controller.onJoinRoom(socket, { room: 'general' });
       vi.mocked(socketServer.to).mockClear();
 
       await controller.onDisconnect(socket);
 
-      expect(await controller.getUsersOnRoom('general')).toHaveLength(0);
-      const roomEmitter = socket.to('general');
+      expect(socketServer.to).toHaveBeenCalledWith('general');
+      const roomEmitter = socketServer.to('general');
       expect(roomEmitter.emit).toHaveBeenCalledWith(
-        eventTypes.message,
+        eventTypes.roomData,
         expect.objectContaining({
-          username: 'Server',
-          text: 'alice has left the chat!',
+          room: 'general',
+          users: [
+            expect.objectContaining({ username: 'alice', online: false }),
+          ],
         }),
       );
     });
@@ -265,7 +328,12 @@ describe('SocketController', () => {
       await controller.onJoinRoom(bob, { room: 'random' });
 
       expect(await controller.getUsersOnRoom('general')).toEqual([
-        { username: 'alice', room: 'general', socketId: 'socket-1' },
+        {
+          username: 'alice',
+          room: 'general',
+          socketId: 'socket-1',
+          online: true,
+        },
       ]);
     });
   });

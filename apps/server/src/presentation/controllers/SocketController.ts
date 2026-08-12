@@ -57,7 +57,12 @@ export default class SocketController {
     // account itself - not this check - is what makes it unique (see
     // docs/adr/2026-08-09-authentication.md).
     const { name: username } = getSocketUser(socket);
-    await this.rooms.addUser({ username, room, socketId: socket.id });
+    const isFirstJoin = await this.rooms.addUser({
+      username,
+      room,
+      socketId: socket.id,
+      online: true,
+    });
 
     socket.join(room);
 
@@ -73,16 +78,20 @@ export default class SocketController {
       text: `Hello ${username}, Welcome to the chat!`,
       createdAt: Date.now(),
     });
-
-    const joinMessage = Message.from({
-      id: uuidv4(),
-      username: 'Server',
-      text: `${username} has joined the chat!`,
-      createdAt: Date.now(),
-    });
-
     socket.emit(eventTypes.message, welcomeMessage.snapshot());
-    socket.to(room).emit(eventTypes.message, joinMessage.snapshot());
+
+    // Only the user's first-ever join to this room gets a "has joined"
+    // message; a returning user is reflected purely via the online
+    // indicator in roomData below (docs/adr/2026-08-12-presence-indicators.md).
+    if (isFirstJoin) {
+      const joinMessage = Message.from({
+        id: uuidv4(),
+        username: 'Server',
+        text: `${username} has joined the chat!`,
+        createdAt: Date.now(),
+      });
+      socket.to(room).emit(eventTypes.message, joinMessage.snapshot());
+    }
 
     this.socketServer.to(room).emit(eventTypes.roomData, {
       room,
@@ -114,17 +123,11 @@ export default class SocketController {
   }
 
   async onDisconnect(socket: Socket): Promise<void> {
-    const user = await this.rooms.removeUser(socket.id);
+    // No "has left" message: a disconnect only flips the sidebar's
+    // online indicator now, see docs/adr/2026-08-12-presence-indicators.md.
+    const user = await this.rooms.markUserOffline(socket.id);
 
     if (user) {
-      const disconnectMsg = Message.from({
-        id: uuidv4(),
-        username: 'Server',
-        text: `${user.username} has left the chat!`,
-        createdAt: Date.now(),
-      });
-
-      socket.to(user.room).emit(eventTypes.message, disconnectMsg.snapshot());
       this.socketServer.to(user.room).emit(eventTypes.roomData, {
         room: user.room,
         users: await this.getUsersOnRoom(user.room),

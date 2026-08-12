@@ -129,16 +129,35 @@ describe('Chat', () => {
     socketHandlers.get('roomData')?.({
       room: 'general',
       users: [
-        { username: 'alice', room: 'general', socketId: 's1' },
-        { username: 'bob', room: 'general', socketId: 's2' },
+        { username: 'alice', room: 'general', socketId: 's1', online: true },
+        { username: 'bob', room: 'general', socketId: 's2', online: false },
       ],
     })
     await wrapper.vm.$nextTick()
 
     const items = wrapper.findAll('.chat__sidebar .users li')
     expect(items).toHaveLength(2)
-    expect(items[0]?.text()).toBe('alice')
-    expect(items[1]?.text()).toBe('bob')
+    expect(items[0]?.text()).toContain('alice')
+    expect(items[1]?.text()).toContain('bob')
+  })
+
+  it('renders distinct online/offline indicators per user', async () => {
+    const wrapper = await mountChat()
+
+    socketHandlers.get('roomData')?.({
+      room: 'general',
+      users: [
+        { username: 'alice', room: 'general', socketId: 's1', online: true },
+        { username: 'bob', room: 'general', socketId: 's2', online: false },
+      ],
+    })
+    await wrapper.vm.$nextTick()
+
+    const items = wrapper.findAll('.chat__sidebar .users li')
+    expect(items[0]?.classes()).toContain('user--online')
+    expect(items[0]?.text()).toContain('online')
+    expect(items[1]?.classes()).toContain('user--offline')
+    expect(items[1]?.text()).toContain('offline')
   })
 
   it('sends a message and clears the input', async () => {

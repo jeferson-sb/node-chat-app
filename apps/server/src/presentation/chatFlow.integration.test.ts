@@ -69,7 +69,6 @@ describe('chat flow (integration)', () => {
   });
 
   afterAll(async () => {
-    app.httpServer.close();
     await app.close();
   });
 

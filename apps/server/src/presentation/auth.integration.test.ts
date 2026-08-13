@@ -31,7 +31,6 @@ describe('auth (integration)', () => {
   });
 
   afterAll(async () => {
-    app.httpServer.close();
     await app.close();
   });
 

@@ -20,7 +20,12 @@ export type App = {
   app: express.Express;
   httpServer: http.Server;
   controller: SocketController;
-  /** Closes whatever real connections bootstrap.ts opened for this app. */
+  /**
+   * Closes every open Socket.io connection (each client is force-
+   * disconnected, not given a grace period to finish up - acceptable for
+   * a server shutdown), the underlying HTTP server, and whatever real
+   * backing-service connections bootstrap.ts opened for this app.
+   */
   close: () => Promise<void>;
 };
 
@@ -113,5 +118,16 @@ export const createApp = (deps: CreateAppDeps = {}): App => {
 
   app.use(errorHandler);
 
-  return { app, httpServer, controller, close };
+  const closeAll = async (): Promise<void> => {
+    // socketServer.close() already closes the underlying httpServer for
+    // us (and every open socket connection, and the Redis adapter if
+    // any) - see socket.io's Server.close(). Awaiting bootstrap's close()
+    // after it, rather than concurrently, so backing services (Redis,
+    // Postgres, Scylla) aren't torn down while a request/socket handler
+    // might still be mid-flight against them.
+    await socketServer.close();
+    await close();
+  };
+
+  return { app, httpServer, controller, close: closeAll };
 };

@@ -1,5 +1,6 @@
 import config from '../config/index.ts';
 import { createApp } from './createApp.ts';
+import { registerGracefulShutdown } from './gracefulShutdown.ts';
 
 const { httpServer, close } = createApp();
 
@@ -10,11 +11,4 @@ httpServer.listen(config.port, () => {
   console.log(`ServerSocket waiting for ${config.client}`);
 });
 
-const shutdown = async (): Promise<void> => {
-  httpServer.close();
-  await close();
-  process.exit(0);
-};
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+registerGracefulShutdown(close);

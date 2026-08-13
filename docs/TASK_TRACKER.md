@@ -108,3 +108,15 @@ Acceptance criteria:
 ## Task 10 - Offline delivery
 
 Messages sent while a user is offline are delivered on reconnect.
+
+## Task 11 - Graceful shutdown
+
+Priority: Medium
+Completed: [x] SIGINT/SIGTERM now close every open Socket.io connection
+and backing service (Redis/Postgres/Scylla), with a force-exit timeout
+if teardown hangs.
+
+Acceptance criteria:
+- [x] Connected clients get a real disconnect event on shutdown, not an
+      abrupt connection drop.
+- [x] A hung shutdown force-exits instead of leaving the process stuck.

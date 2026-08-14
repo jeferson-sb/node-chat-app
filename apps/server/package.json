@@ -11,6 +11,7 @@
     "dev": "node --watch src/presentation/server.ts",
     "db:migrate:auth": "better-auth migrate -y",
     "db:migrate:scylla": "node src/infra/history/migrate.ts",
+    "debug:rooms": "node src/infra/rooms/inspectRoomState.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

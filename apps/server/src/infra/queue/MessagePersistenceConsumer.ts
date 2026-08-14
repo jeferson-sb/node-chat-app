@@ -1,5 +1,6 @@
 import type { MessageSnapshot } from '../../domain/Message.ts';
 import type { MessageHistoryRepository } from '../history/MessageHistoryRepository.ts';
+import { logger } from '../logging/createLogger.ts';
 
 export type PendingEntry = {
   id: string;
@@ -69,9 +70,9 @@ export class MessagePersistenceConsumer {
         return;
       } catch (error) {
         if (attempt === this.maxAttempts) {
-          console.error(
-            `[MessagePersistenceConsumer]: giving up on entry ${entry.id} after ${attempt} attempts, dead-lettering`,
-            error,
+          logger.error(
+            { err: error, entryId: entry.id, attempts: attempt },
+            'giving up on entry after exhausting attempts, dead-lettering',
           );
           await this.stream.deadLetter(entry);
           await this.stream.ack(entry.id);

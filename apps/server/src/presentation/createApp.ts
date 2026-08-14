@@ -9,6 +9,7 @@ import HTTPError from '../infra/errors/HTTPError.ts';
 import { createAuth } from '../infra/auth/createAuth.ts';
 import { requireAuthenticatedSocket } from './socketAuth.ts';
 import { bootstrap, type BootstrapDeps } from '../bootstrap.ts';
+import { logger } from '../infra/logging/createLogger.ts';
 
 // TODO: Extract to use case
 import SocketController, {
@@ -82,21 +83,33 @@ export const createApp = (deps: CreateAppDeps = {}): App => {
   app.all('/api/auth/*splat', toNodeHandler(auth));
 
   socketServer.on('connection', (socket) => {
-    console.log(`[socket]: new socket connected: ${socket.id}`);
+    logger.info({ socketId: socket.id }, 'new socket connected');
 
     // Listen to socket events. Handlers are async (they now call the
     // Redis-backed RoomRepository when REDIS_URL is set), so failures are
     // caught here instead of becoming an unhandled rejection that would
     // crash the process on a transient Redis error.
     socket.on('join', (data: JoinRoomPayload) => {
-      controller.onJoinRoom(socket, data).catch(console.error);
+      controller.onJoinRoom(socket, data).catch((error: unknown) => {
+        logger.error({ err: error, socketId: socket.id }, 'onJoinRoom failed');
+      });
     });
     socket.on('error', () => controller.onConnectionError(socket));
     socket.on('sendMessage', (data: SendMessagePayload) => {
-      controller.onSendMessage(socket, data).catch(console.error);
+      controller.onSendMessage(socket, data).catch((error: unknown) => {
+        logger.error(
+          { err: error, socketId: socket.id },
+          'onSendMessage failed',
+        );
+      });
     });
     socket.on('disconnect', () => {
-      controller.onDisconnect(socket).catch(console.error);
+      controller.onDisconnect(socket).catch((error: unknown) => {
+        logger.error(
+          { err: error, socketId: socket.id },
+          'onDisconnect failed',
+        );
+      });
     });
   });
 

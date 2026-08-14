@@ -8,6 +8,7 @@ import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
 import type { MessageQueue } from '../../infra/queue/MessageQueue.ts';
 import { getSocketUser } from '../socketAuth.ts';
+import { logger } from '../../infra/logging/createLogger.ts';
 
 export type { ChatUser };
 
@@ -49,7 +50,7 @@ export default class SocketController {
 
   async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
     if (!room) {
-      console.error('Room is required');
+      logger.error('Room is required');
     }
 
     // No "username already in use" check here: the username now comes
@@ -134,11 +135,11 @@ export default class SocketController {
       });
     }
 
-    console.log(`[socket]: disconnected: ${socket.id}`);
+    logger.info({ socketId: socket.id }, 'socket disconnected');
   }
 
   onConnectionError(id: unknown): void {
-    console.error(id);
+    logger.error(id);
   }
 
   getUsersOnRoom(room: string): Promise<ChatUser[]> {

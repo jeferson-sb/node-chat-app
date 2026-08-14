@@ -19,6 +19,7 @@ import { RedisConsumerStream } from './infra/queue/RedisConsumerStream.ts';
 import { MessagePersistenceConsumer } from './infra/queue/MessagePersistenceConsumer.ts';
 import { RedisMessagePersistenceRunner } from './infra/queue/RedisMessagePersistenceRunner.ts';
 import type { MessageQueue } from './infra/queue/MessageQueue.ts';
+import { logger } from './infra/logging/createLogger.ts';
 
 /**
  * Injection seam for the whole app: `createApp.ts` passes this straight
@@ -180,7 +181,9 @@ const resolveMessageQueue = (
     consumerReadClient,
     consumer,
   );
-  const started = runner.start().catch(console.error);
+  const started = runner.start().catch((error: unknown) => {
+    logger.error({ err: error }, 'message persistence runner failed to start');
+  });
 
   return {
     value: new RedisMessageQueue(producerClient),

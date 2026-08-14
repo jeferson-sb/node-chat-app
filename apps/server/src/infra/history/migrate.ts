@@ -1,5 +1,6 @@
 import { Client } from 'cassandra-driver';
 import config from '../../config/index.ts';
+import { logger } from '../logging/createLogger.ts';
 
 /**
  * Idempotent schema setup for the ScyllaDB-backed chat history
@@ -36,5 +37,5 @@ await client.execute(`
   ) WITH CLUSTERING ORDER BY (created_at DESC)
 `);
 
-console.log('ScyllaDB schema ready (keyspace "chatme", table "messages")');
+logger.info('ScyllaDB schema ready (keyspace "chatme", table "messages")');
 await client.shutdown();

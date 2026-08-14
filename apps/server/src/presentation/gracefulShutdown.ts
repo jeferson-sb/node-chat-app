@@ -1,3 +1,5 @@
+import { logger } from '../infra/logging/createLogger.ts';
+
 export type GracefulShutdownOptions = {
   /**
    * Max time to wait for `close()` to resolve before forcing an exit
@@ -38,11 +40,12 @@ export const registerGracefulShutdown = (
     if (shuttingDown) return;
     shuttingDown = true;
 
-    console.log(`[server]: received ${signal}, shutting down gracefully`);
+    logger.info({ signal }, 'received signal, shutting down gracefully');
 
     const forceExitTimer = setTimeout(() => {
-      console.error(
-        `[server]: graceful shutdown exceeded ${forceExitAfterMs}ms, forcing exit`,
+      logger.error(
+        { forceExitAfterMs },
+        'graceful shutdown exceeded timeout, forcing exit',
       );
       proc.exit(1);
     }, forceExitAfterMs);
@@ -52,7 +55,7 @@ export const registerGracefulShutdown = (
       clearTimeout(forceExitTimer);
       proc.exit(0);
     } catch (error) {
-      console.error('[server]: error during graceful shutdown', error);
+      logger.error({ err: error }, 'error during graceful shutdown');
       clearTimeout(forceExitTimer);
       proc.exit(1);
     }

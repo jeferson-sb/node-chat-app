@@ -1,6 +1,7 @@
 import type { Socket } from 'socket.io';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { createAuth } from '../infra/auth/createAuth.ts';
+import { logger } from '../infra/logging/createLogger.ts';
 
 export type AuthenticatedUser = {
   id: string;
@@ -63,7 +64,12 @@ export const requireAuthenticatedSocket =
             socket.disconnect(true);
           }
         })
-        .catch(console.error);
+        .catch((error: unknown) => {
+          logger.error(
+            { err: error, socketId: socket.id },
+            'session re-check failed',
+          );
+        });
     }, sessionCheckIntervalMs);
 
     socket.once('disconnect', () => clearInterval(interval));

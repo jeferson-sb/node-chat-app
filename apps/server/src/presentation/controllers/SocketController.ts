@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message } from '../../domain/Message.ts';
+import { ValidationError } from '../../domain/errors/ValidationError.ts';
+import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
@@ -50,7 +52,7 @@ export default class SocketController {
 
   async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
     if (!room) {
-      logger.error('Room is required');
+      throw new ValidationError('Room is required');
     }
 
     // No "username already in use" check here: the username now comes
@@ -106,6 +108,13 @@ export default class SocketController {
   ): Promise<void> {
     const { name: username } = getSocketUser(socket);
     const user = await this.rooms.findUserByUsername(username);
+
+    if (!user) {
+      throw new RoomNotFoundError(
+        `${username} has no active room membership to send a message to`,
+      );
+    }
+
     const msg = Message.from({
       id: uuidv4(),
       username,
@@ -113,14 +122,12 @@ export default class SocketController {
       createdAt: Date.now(),
     });
 
-    if (user) {
-      // Broadcast first: real-time delivery must not wait on, or fail
-      // because of, history persistence (docs/adr/2026-08-11-message-
-      // queue-persistence.md) - enqueueing is buffered/retried by the
-      // queue, unlike a direct write that fails outright.
-      this.socketServer.to(user.room).emit(eventTypes.message, msg.snapshot());
-      await this.messageQueue.enqueue(user.room, msg.snapshot());
-    }
+    // Broadcast first: real-time delivery must not wait on, or fail
+    // because of, history persistence (docs/adr/2026-08-11-message-
+    // queue-persistence.md) - enqueueing is buffered/retried by the
+    // queue, unlike a direct write that fails outright.
+    this.socketServer.to(user.room).emit(eventTypes.message, msg.snapshot());
+    await this.messageQueue.enqueue(user.room, msg.snapshot());
   }
 
   async onDisconnect(socket: Socket): Promise<void> {
@@ -138,8 +145,8 @@ export default class SocketController {
     logger.info({ socketId: socket.id }, 'socket disconnected');
   }
 
-  onConnectionError(id: unknown): void {
-    logger.error(id);
+  onConnectionError(socket: Socket): void {
+    logger.error({ socketId: socket.id }, 'socket connection error');
   }
 
   getUsersOnRoom(room: string): Promise<ChatUser[]> {

@@ -10,6 +10,7 @@ import { createAuth } from '../infra/auth/createAuth.ts';
 import { requireAuthenticatedSocket } from './socketAuth.ts';
 import { bootstrap, type BootstrapDeps } from '../bootstrap.ts';
 import { logger } from '../infra/logging/createLogger.ts';
+import { handleSocketEvent } from './handleSocketEvent.ts';
 
 // TODO: Extract to use case
 import SocketController, {
@@ -87,29 +88,20 @@ export const createApp = (deps: CreateAppDeps = {}): App => {
 
     // Listen to socket events. Handlers are async (they now call the
     // Redis-backed RoomRepository when REDIS_URL is set), so failures are
-    // caught here instead of becoming an unhandled rejection that would
-    // crash the process on a transient Redis error.
+    // routed through handleSocketEvent instead of becoming an unhandled
+    // rejection that would crash the process on a transient Redis error -
+    // a DomainError (ValidationError, RoomNotFoundError) becomes a
+    // client-facing `error` event, anything else is logged and the
+    // client gets a generic message (see handleSocketEvent.ts).
     socket.on('join', (data: JoinRoomPayload) => {
-      controller.onJoinRoom(socket, data).catch((error: unknown) => {
-        logger.error({ err: error, socketId: socket.id }, 'onJoinRoom failed');
-      });
+      handleSocketEvent(socket, () => controller.onJoinRoom(socket, data));
     });
     socket.on('error', () => controller.onConnectionError(socket));
     socket.on('sendMessage', (data: SendMessagePayload) => {
-      controller.onSendMessage(socket, data).catch((error: unknown) => {
-        logger.error(
-          { err: error, socketId: socket.id },
-          'onSendMessage failed',
-        );
-      });
+      handleSocketEvent(socket, () => controller.onSendMessage(socket, data));
     });
     socket.on('disconnect', () => {
-      controller.onDisconnect(socket).catch((error: unknown) => {
-        logger.error(
-          { err: error, socketId: socket.id },
-          'onDisconnect failed',
-        );
-      });
+      handleSocketEvent(socket, () => controller.onDisconnect(socket));
     });
   });
 

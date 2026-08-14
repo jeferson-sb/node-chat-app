@@ -1,3 +1,5 @@
+import { ValidationError } from './errors/ValidationError.ts';
+
 export type MessageProps = {
   id: string;
   username: string;
@@ -24,7 +26,7 @@ export class Message {
 
   static from(props: MessageProps): Message {
     if (props.text.length > MAX_TEXT_LENGTH) {
-      throw new Error(
+      throw new ValidationError(
         `Message text cannot exceed ${MAX_TEXT_LENGTH} characters`,
       );
     }

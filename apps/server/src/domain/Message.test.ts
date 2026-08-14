@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Message } from './Message.ts';
+import { ValidationError } from './errors/ValidationError.ts';
 
 describe('Message', () => {
   it('creates a snapshot with the given props', () => {
@@ -46,5 +47,13 @@ describe('Message', () => {
     expect(() =>
       Message.from({ id: '4', username: 'alice', text, createdAt: 1 }),
     ).toThrow('Message text cannot exceed 100000 characters');
+  });
+
+  it('raises a ValidationError, not a plain Error, when text is too long', () => {
+    const text = 'a'.repeat(100_001);
+
+    expect(() =>
+      Message.from({ id: '5', username: 'alice', text, createdAt: 1 }),
+    ).toThrow(ValidationError);
   });
 });

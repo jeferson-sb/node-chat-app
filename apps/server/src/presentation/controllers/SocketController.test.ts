@@ -5,6 +5,8 @@ import { InMemoryRoomRepository } from '../../infra/rooms/InMemoryRoomRepository
 import { InMemoryMessageHistoryRepository } from '../../infra/history/InMemoryMessageHistoryRepository.ts';
 import { InMemoryMessageQueue } from '../../infra/queue/InMemoryMessageQueue.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
+import { ValidationError } from '../../domain/errors/ValidationError.ts';
+import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
 
 /**
  * Builds a minimal mock of the subset of socket.io's `Socket` and `Server`
@@ -188,6 +190,14 @@ describe('SocketController', () => {
 
       expect(await messageHistory.getRecentMessages('general', 10)).toEqual([]);
     });
+
+    it('rejects a missing room with a ValidationError', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await expect(controller.onJoinRoom(socket, { room: '' })).rejects.toThrow(
+        ValidationError,
+      );
+    });
   });
 
   describe('onSendMessage', () => {
@@ -209,10 +219,12 @@ describe('SocketController', () => {
       );
     });
 
-    it('does nothing when the sender is not a known user', async () => {
+    it('rejects a message from a sender with no active room membership', async () => {
       const socket = createMockSocket('socket-1', 'ghost');
 
-      await controller.onSendMessage(socket, { message: 'hello?' });
+      await expect(
+        controller.onSendMessage(socket, { message: 'hello?' }),
+      ).rejects.toThrow(RoomNotFoundError);
 
       expect(socketServer.to).not.toHaveBeenCalled();
     });

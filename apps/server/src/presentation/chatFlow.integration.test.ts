@@ -4,6 +4,7 @@ import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { createApp, type App } from './createApp.ts';
 import { createTestAuthDatabase } from '../infra/auth/createTestAuthDatabase.ts';
 import { eventTypes } from '../utils/eventTypes.ts';
+import type { ReadCursorRepository } from '../infra/cursor/ReadCursorRepository.ts';
 
 type ChatMessage = {
   id: string;
@@ -62,7 +63,21 @@ describe('chat flow (integration)', () => {
 
   beforeAll(async () => {
     const authDatabase = await createTestAuthDatabase();
-    app = createApp({ authDatabase });
+    // Redis isn't configured for this test run, so bootstrap.ts would
+    // otherwise resolve NullReadCursorRepository (offline delivery
+    // disabled) - inject a working fake so the offline-delivery test
+    // below can exercise the real feature over the wire. Not a shared
+    // production class, same reasoning as SocketController.test.ts's own
+    // fake (docs/adr/2026-08-14-offline-delivery.md).
+    const cursors = new Map<string, number>();
+    const readCursors: ReadCursorRepository = {
+      getLastSeenAt: async (room, username) =>
+        cursors.get(`${room}:${username}`),
+      markSeen: async (room, username, seenAt) => {
+        cursors.set(`${room}:${username}`, seenAt);
+      },
+    };
+    app = createApp({ authDatabase, readCursors });
     await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
     const { port } = app.httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
@@ -237,6 +252,47 @@ describe('chat flow (integration)', () => {
         socketId: aliceAgain.id,
         online: true,
       },
+    ]);
+  }, 20_000);
+
+  it('delivers messages sent while a user was offline, on reconnect', async () => {
+    const room = uniqueRoom();
+    const alice = await connectAsUser('alice');
+    alice.emit(eventTypes.join, { room });
+    await waitForEvent(alice, eventTypes.roomData);
+
+    const bob = await connectAsUser('bob');
+    bob.emit(eventTypes.join, { room });
+    await waitForEvent(bob, eventTypes.roomData);
+    await waitForEvent(alice, eventTypes.message); // consume bob's join notice
+
+    const bobSeesAliceOffline = waitForEvent<RoomData>(
+      bob,
+      eventTypes.roomData,
+    );
+    alice.disconnect();
+    await bobSeesAliceOffline;
+
+    const bobReceivesOwnBroadcast = waitForEvent<ChatMessage>(
+      bob,
+      eventTypes.message,
+    );
+    bob.emit('sendMessage', { message: 'missed while offline' });
+    await bobReceivesOwnBroadcast;
+
+    const aliceAgain = await connectAsUser('alice');
+    const historyPromise = waitForEvent<ChatMessage[]>(
+      aliceAgain,
+      eventTypes.history,
+    );
+    aliceAgain.emit(eventTypes.join, { room });
+
+    const history = await historyPromise;
+    expect(history).toEqual([
+      expect.objectContaining({
+        username: 'bob',
+        text: 'missed while offline',
+      }),
     ]);
   }, 20_000);
 });

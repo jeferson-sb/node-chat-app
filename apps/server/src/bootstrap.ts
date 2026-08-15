@@ -19,6 +19,9 @@ import { RedisConsumerStream } from './infra/queue/RedisConsumerStream.ts';
 import { MessagePersistenceConsumer } from './infra/queue/MessagePersistenceConsumer.ts';
 import { RedisMessagePersistenceRunner } from './infra/queue/RedisMessagePersistenceRunner.ts';
 import type { MessageQueue } from './infra/queue/MessageQueue.ts';
+import { NullReadCursorRepository } from './infra/cursor/NullReadCursorRepository.ts';
+import { RedisReadCursorRepository } from './infra/cursor/RedisReadCursorRepository.ts';
+import type { ReadCursorRepository } from './infra/cursor/ReadCursorRepository.ts';
 import { logger } from './infra/logging/createLogger.ts';
 
 /**
@@ -36,6 +39,7 @@ export type BootstrapDeps = {
   rooms?: RoomRepository;
   messageHistory?: MessageHistoryRepository;
   messageQueue?: MessageQueue;
+  readCursors?: ReadCursorRepository;
 };
 
 export type Services = {
@@ -43,6 +47,7 @@ export type Services = {
   database: AuthDatabase;
   messageHistory: MessageHistoryRepository;
   messageQueue: MessageQueue;
+  readCursors: ReadCursorRepository;
   /**
    * Socket.io adapter for cross-node broadcast, only set when the real
    * Redis-backed rooms service is in use (REDIS_URL configured, no
@@ -197,6 +202,35 @@ const resolveMessageQueue = (
 };
 
 /**
+ * Picks the offline-delivery read-cursor store. Deliberately Redis-only
+ * (docs/adr/2026-08-14-offline-delivery.md): without REDIS_URL, offline
+ * delivery is disabled outright via NullReadCursorRepository rather than
+ * gaining a single-process fallback - unlike rooms/messageHistory/
+ * messageQueue, a cursor that doesn't survive a restart or isn't shared
+ * across nodes would misbehave silently, which is worse than the feature
+ * simply being unavailable.
+ */
+const resolveReadCursors = (
+  override?: ReadCursorRepository,
+): Resolved<ReadCursorRepository> => {
+  if (override) {
+    return { value: override, close: noClose };
+  }
+
+  if (!config.redisUrl) {
+    return { value: new NullReadCursorRepository(), close: noClose };
+  }
+
+  const client = createRedisClient(config.redisUrl);
+  return {
+    value: new RedisReadCursorRepository(client),
+    close: async () => {
+      client.disconnect();
+    },
+  };
+};
+
+/**
  * Composition root: resolves every service `createApp.ts` needs, either
  * from the given override (tests) or from its real, config/env-driven
  * default (production/dev). Extracted from createApp.ts so service
@@ -211,12 +245,14 @@ export const bootstrap = (deps: BootstrapDeps = {}): Services => {
     messageHistory.value,
     deps.messageQueue,
   );
+  const readCursors = resolveReadCursors(deps.readCursors);
 
   const close = async (): Promise<void> => {
     await rooms.close();
     await database.close();
     await messageHistory.close();
     await messageQueue.close();
+    await readCursors.close();
   };
 
   return {
@@ -225,6 +261,7 @@ export const bootstrap = (deps: BootstrapDeps = {}): Services => {
     database: database.value,
     messageHistory: messageHistory.value,
     messageQueue: messageQueue.value,
+    readCursors: readCursors.value,
     close,
   };
 };

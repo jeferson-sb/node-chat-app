@@ -17,4 +17,25 @@ export class InMemoryMessageHistoryRepository implements MessageHistoryRepositor
     const messages = this.messagesByRoom.get(room) ?? [];
     return messages.slice(-limit).reverse();
   }
+
+  async getMessagesSince(
+    room: string,
+    sinceAt: number,
+    limit: number,
+  ): Promise<MessageSnapshot[]> {
+    const messages = this.messagesByRoom.get(room) ?? [];
+    const missed: MessageSnapshot[] = [];
+
+    // Walk backward from the newest message and stop as soon as we're
+    // past the cursor, instead of filtering the room's entire history
+    // every call - a reconnecting user typically missed a handful of
+    // messages, not the whole room's lifetime.
+    for (let i = messages.length - 1; i >= 0 && missed.length < limit; i--) {
+      const message = messages[i];
+      if (!message || message.createdAt <= sinceAt) break;
+      missed.push(message);
+    }
+
+    return missed;
+  }
 }

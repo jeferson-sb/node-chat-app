@@ -78,4 +78,45 @@ export class ScyllaMessageHistoryRepository implements MessageHistoryRepository 
 
     return messages;
   }
+
+  /**
+   * Same bucket-walk as getRecentMessages, but bounded by sinceAt's own
+   * bucket rather than a fixed BUCKET_LOOKBACK - a reconnecting user's
+   * cursor is always a real prior timestamp, not an unbounded scan.
+   */
+  async getMessagesSince(
+    room: string,
+    sinceAt: number,
+    limit: number,
+  ): Promise<MessageSnapshot[]> {
+    const currentBucket = bucketFor(Date.now());
+    const sinceBucket = bucketFor(sinceAt);
+    const messages: MessageSnapshot[] = [];
+
+    for (
+      let bucket = currentBucket;
+      bucket >= sinceBucket && messages.length < limit;
+      bucket--
+    ) {
+      const result = await this.client.execute(
+        `SELECT message_id, username, text, created_at FROM messages
+         WHERE room_id = ? AND bucket = ? AND created_at > ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        [room, bucket, new Date(sinceAt), limit - messages.length],
+        { prepare: true },
+      );
+
+      messages.push(
+        ...result.rows.map((row: types.Row) => ({
+          id: (row.get('message_id') as types.Uuid).toString(),
+          username: row.get('username') as string,
+          text: row.get('text') as string,
+          createdAt: (row.get('created_at') as Date).getTime(),
+        })),
+      );
+    }
+
+    return messages;
+  }
 }

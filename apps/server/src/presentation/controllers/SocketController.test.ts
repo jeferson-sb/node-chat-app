@@ -47,19 +47,42 @@ const createMockServer = (): Server => {
   } as unknown as Server;
 };
 
+/**
+ * Map-backed fake, not a shared production class - ReadCursorRepository
+ * is deliberately Redis-only in production (see NullReadCursorRepository/
+ * docs/adr/2026-08-14-offline-delivery.md), so this test double exists
+ * only here rather than as an InMemory implementation the app could
+ * accidentally fall back to.
+ */
+const createFakeReadCursors = () => {
+  const cursors = new Map<string, number>();
+  const key = (room: string, username: string): string => `${room}:${username}`;
+  return {
+    getLastSeenAt: vi.fn(async (room: string, username: string) =>
+      cursors.get(key(room, username)),
+    ),
+    markSeen: vi.fn(async (room: string, username: string, seenAt: number) => {
+      cursors.set(key(room, username), seenAt);
+    }),
+  };
+};
+
 describe('SocketController', () => {
   let socketServer: Server;
   let messageHistory: InMemoryMessageHistoryRepository;
+  let readCursors: ReturnType<typeof createFakeReadCursors>;
   let controller: SocketController;
 
   beforeEach(() => {
     socketServer = createMockServer();
     messageHistory = new InMemoryMessageHistoryRepository();
+    readCursors = createFakeReadCursors();
     controller = new SocketController({
       socketServer,
       rooms: new InMemoryRoomRepository(),
       messageHistory,
       messageQueue: new InMemoryMessageQueue(messageHistory),
+      readCursors,
     });
   });
 
@@ -251,6 +274,7 @@ describe('SocketController', () => {
         messageQueue: {
           enqueue: vi.fn().mockRejectedValue(new Error('queue unavailable')),
         },
+        readCursors: createFakeReadCursors(),
       });
       const socket = createMockSocket('socket-1', 'alice');
       await failingController.onJoinRoom(socket, { room: 'general' });
@@ -329,6 +353,66 @@ describe('SocketController', () => {
       await controller.onDisconnect(socket);
 
       expect(socketServer.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('offline delivery', () => {
+    it('delivers only messages saved after the cursor on reconnect', async () => {
+      await messageHistory.saveMessage('general', {
+        id: '1',
+        username: 'bob',
+        text: 'seen before disconnect',
+        createdAt: 100,
+      });
+      await readCursors.markSeen('general', 'alice', 100);
+      await messageHistory.saveMessage('general', {
+        id: '2',
+        username: 'bob',
+        text: 'missed while offline',
+        createdAt: 200,
+      });
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(socket.emit).toHaveBeenCalledWith(eventTypes.history, [
+        expect.objectContaining({ text: 'missed while offline' }),
+      ]);
+    });
+
+    it('advances the cursor to the newest delivered message on join', async () => {
+      await messageHistory.saveMessage('general', {
+        id: '1',
+        username: 'bob',
+        text: 'missed',
+        createdAt: 150,
+      });
+      await readCursors.markSeen('general', 'alice', 100);
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(150);
+    });
+
+    it('does not advance the cursor on join when there is nothing new to deliver', async () => {
+      await readCursors.markSeen('general', 'alice', 100);
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(100);
+    });
+
+    it('advances the cursor at disconnect so live-received messages are not redelivered on the next reconnect', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+      const before = Date.now();
+
+      await controller.onDisconnect(socket);
+
+      const lastSeenAt = await readCursors.getLastSeenAt('general', 'alice');
+      expect(lastSeenAt).toBeGreaterThanOrEqual(before);
     });
   });
 

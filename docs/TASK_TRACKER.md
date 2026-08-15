@@ -109,6 +109,21 @@ Acceptance criteria:
 
 Messages sent while a user is offline are delivered on reconnect.
 
+Priority: Medium
+Completed: [x] Added a Redis-backed read cursor per (room, username):
+on join, a reconnecting user gets only what they missed since their
+cursor (instead of always replaying a fixed 50-message window); on
+disconnect, the cursor advances to "now" so live-received messages
+aren't redelivered on the next reconnect. Falls back to today's fixed-
+window behavior when Redis isn't configured (see
+docs/adr/2026-08-14-offline-delivery.md).
+
+Acceptance criteria:
+- [x] A user reconnecting after being offline receives messages sent
+      to their room while they were disconnected.
+- [x] A user who stayed connected through live chat activity does not
+      see those same messages replayed as "missed" on a later reconnect.
+
 ## Task 11 - Graceful shutdown
 
 Priority: Medium

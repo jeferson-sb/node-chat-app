@@ -44,14 +44,22 @@ export type CreateAppDeps = BootstrapDeps;
 export const createApp = (deps: CreateAppDeps = {}): App => {
   const app = express();
   const httpServer = http.createServer(app);
-  const { rooms, adapter, database, messageHistory, messageQueue, close } =
-    bootstrap(deps);
+  const {
+    rooms,
+    adapter,
+    database,
+    messageHistory,
+    messageQueue,
+    readCursors,
+    close,
+  } = bootstrap(deps);
   const socketServer = setupSocketServer(httpServer, { adapter });
   const controller = new SocketController({
     socketServer,
     rooms,
     messageHistory,
     messageQueue,
+    readCursors,
   });
   const auth = createAuth(database, [config.client]);
   socketServer.use(requireAuthenticatedSocket(auth));

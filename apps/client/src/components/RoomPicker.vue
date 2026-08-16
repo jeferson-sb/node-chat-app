@@ -30,51 +30,56 @@ const joinRoom = (): void => {
 
 <style scoped>
 .centered-form {
+  --field-surface: oklch(0% 0 0 / 0.3);
+  --box-shadow-color: oklch(0% 0 0 / 0.2);
+
+  container: centered-form / inline-size;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  block-size: 100dvh;
   background-color: var(--bg-color);
   background-image: url('../assets/bg-illustration.svg');
   background-position: center;
   background-size: cover;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+
+  & input {
+    inline-size: 100%;
+    box-sizing: border-box;
+    margin-block-end: 1rem;
+    padding: 0.625rem;
+    border: 1px solid var(--field-surface);
+    border-radius: 3px;
+    background-color: var(--field-surface);
+    color: var(--white);
+
+    &:focus {
+      border-color: var(--purple);
+    }
+  }
+
+  & button {
+    inline-size: 100%;
+    min-block-size: 2.5rem;
+    background: var(--purple);
+    font-weight: 600;
+    letter-spacing: 1.1px;
+    line-height: 1rem;
+
+    &:hover {
+      background: var(--light-purple);
+    }
+  }
 }
 
+/* Keeps its 420px until the viewport can no longer fit it with its padding. */
 .centered-form__box {
+  inline-size: min(26.25rem, 100cqi - 6rem);
+  padding: 2.5rem;
   border-radius: 5px;
   background: var(--dark-2);
-  padding: 40px;
-  width: 420px;
-  font-size: 18px;
-  box-shadow: 0 2px 10px 0 rgba(0, 0, 0, 0.2);
-}
-
-.centered-form input {
-  margin-bottom: 16px;
-  width: 100%;
-  padding: 10px;
-  box-sizing: border-box;
-  border-radius: 3px;
-  border: 1px solid #0000004d;
-  background-color: #0000004d;
-  color: var(--white);
-}
-
-.centered-form input:focus {
-  border-color: var(--purple);
-}
-
-.centered-form button {
-  background: var(--purple);
-  font-weight: 600;
-  letter-spacing: 1.1px;
-  line-height: 16px;
-  min-height: 40px;
-  width: 100%;
-}
-
-.centered-form button:hover {
-  background: var(--light-purple);
+  font-size: 1.125rem;
+  box-shadow: 0 2px 10px 0 var(--box-shadow-color);
 }
 
 .puff-in-center {

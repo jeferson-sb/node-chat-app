@@ -44,64 +44,65 @@ const onSuccess = (): void => {
 
 <style scoped>
 .centered-form {
+  --field-surface: oklch(0% 0 0 / 0.3);
+  --box-shadow-color: oklch(0% 0 0 / 0.2);
+
+  container: centered-form / inline-size;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  block-size: 100dvh;
   background-color: var(--bg-color);
   background-image: url('../../assets/bg-illustration.svg');
   background-position: center;
   background-size: cover;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
+/* Keeps its 420px until the viewport can no longer fit it with its padding. */
 .centered-form__box {
+  inline-size: min(26.25rem, 100cqi - 6rem);
+  padding: 2.5rem;
   border-radius: 5px;
   background: var(--dark-2);
-  padding: 40px;
-  width: 420px;
-  font-size: 18px;
-  box-shadow: 0 2px 10px 0 rgba(0, 0, 0, 0.2);
+  font-size: 1.125rem;
+  box-shadow: 0 2px 10px 0 var(--box-shadow-color);
 }
 
 .tabs {
   display: flex;
   background: var(--dark);
   border-radius: 3px;
-  padding: 4px;
-  margin-bottom: 24px;
+  padding: 0.25rem;
+  margin-block-end: 1.5rem;
 }
 
 .tabs__item {
   flex: 1;
   background: transparent;
   color: var(--gray);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  padding: 8px;
-}
+  padding: 0.5rem;
 
-.tabs__item:hover {
-  background: transparent;
-  color: var(--white);
-}
+  &:hover {
+    background: transparent;
+    color: var(--white);
+  }
 
-.tabs__item--active {
-  background: var(--purple);
-  color: var(--white);
-}
-
-.tabs__item--active:hover {
-  background: var(--purple);
+  &.tabs__item--active {
+    background: var(--purple);
+    color: var(--white);
+  }
 }
 
 .centered-form :deep(input) {
-  margin-bottom: 16px;
-  width: 100%;
-  padding: 10px;
+  inline-size: 100%;
   box-sizing: border-box;
+  margin-block-end: 1rem;
+  padding: 0.625rem;
+  border: 1px solid var(--field-surface);
   border-radius: 3px;
-  border: 1px solid #0000004d;
-  background-color: #0000004d;
+  background-color: var(--field-surface);
   color: var(--white);
 }
 
@@ -110,12 +111,12 @@ const onSuccess = (): void => {
 }
 
 .centered-form :deep(button[type='submit']) {
+  inline-size: 100%;
+  min-block-size: 2.5rem;
   background: var(--purple);
   font-weight: 600;
   letter-spacing: 1.1px;
-  line-height: 16px;
-  min-height: 40px;
-  width: 100%;
+  line-height: 1rem;
 }
 
 .centered-form :deep(button[type='submit']:hover) {
@@ -124,9 +125,8 @@ const onSuccess = (): void => {
 
 .centered-form :deep(.auth-form__error) {
   color: var(--error);
-  font-size: 14px;
-  margin-top: -8px;
-  margin-bottom: 16px;
+  font-size: 0.875rem;
+  margin-block: -0.5rem 1rem;
 }
 
 .puff-in-center {

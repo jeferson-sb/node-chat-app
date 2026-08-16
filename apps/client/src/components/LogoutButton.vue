@@ -26,24 +26,25 @@ const logout = async (): Promise<void> => {
 
 <style scoped>
 .logout-button {
-  width: 100%;
-  margin: 24px 0;
-  padding-inline: 24px;
+  inline-size: 100%;
+  min-block-size: 2.5rem;
+  margin-block: 1.5rem;
+  margin-inline: 0;
+  padding-inline: 1.5rem;
   background: var(--purple);
   font-weight: 600;
   letter-spacing: 1.1px;
-  min-height: 40px;
   border-radius: 0;
-}
 
-.logout-button:hover {
-  background: var(--light-purple);
+  &:hover {
+    background: var(--light-purple);
+  }
 }
 
 .logout-button__error {
   color: var(--error);
-  font-size: 14px;
-  padding-inline: 24px;
-  margin-block: 8px 0;
+  font-size: 0.875rem;
+  padding-inline: 1.5rem;
+  margin-block: 0.5rem 0;
 }
 </style>

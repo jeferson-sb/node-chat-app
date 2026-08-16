@@ -2,7 +2,8 @@ import type { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { ChatUser } from '../../domain/ChatUser.ts';
-import { Message } from '../../domain/Message.ts';
+import { Message, type MessageSnapshot } from '../../domain/Message.ts';
+import { mergeHistory } from './mergeHistory.ts';
 import { ValidationError } from '../../domain/errors/ValidationError.ts';
 import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
@@ -74,24 +75,22 @@ export default class SocketController {
 
     socket.join(room);
 
-    // A known cursor means this isn't a brand-new membership: fetch only
-    // what was missed while offline (docs/adr/2026-08-14-offline-
-    // delivery.md) instead of always replaying the fixed recent-history
-    // window, which would either miss older messages in a busy room or
-    // redeliver ones the user already saw live before disconnecting.
+    // `history` is a snapshot, not a delta - the client assigns it over
+    // its whole transcript (docs/adr/2026-08-15-history-snapshot-on-join.md).
     const lastSeenAt = await this.readCursors.getLastSeenAt(room, username);
-    const history =
+    const [recent, missed] = await Promise.all([
+      this.messageHistory.getRecentMessages(room, HISTORY_LIMIT),
       lastSeenAt === undefined
-        ? await this.messageHistory.getRecentMessages(room, HISTORY_LIMIT)
-        : await this.messageHistory.getMessagesSince(
-            room,
-            lastSeenAt,
-            HISTORY_LIMIT,
-          );
+        ? Promise.resolve<MessageSnapshot[]>([])
+        : this.messageHistory.getMessagesSince(room, lastSeenAt, HISTORY_LIMIT),
+    ]);
+    const history = mergeHistory(recent, missed, HISTORY_LIMIT);
     socket.emit(eventTypes.history, history.slice().reverse());
 
+    // Forward only: the recent window reaches back past the cursor, so
+    // the newest delivered message may be one already seen.
     const [newestDelivered] = history;
-    if (newestDelivered) {
+    if (newestDelivered && newestDelivered.createdAt > (lastSeenAt ?? 0)) {
       await this.readCursors.markSeen(
         room,
         username,
@@ -160,12 +159,11 @@ export default class SocketController {
     const user = await this.rooms.markUserOffline(socket.id);
 
     if (user) {
-      // Everything broadcast while this user was connected was already
-      // seen live, so the cursor advances to "now" here rather than only
-      // at the next join - otherwise the next reconnect's getMessagesSince
-      // would redeliver this whole session's messages as "missed" (see
-      // docs/adr/2026-08-14-offline-delivery.md).
-      await this.readCursors.markSeen(user.room, user.username, Date.now());
+      // Everything broadcast while connected was already seen live, so
+      // the cursor advances here too (docs/adr/2026-08-14-offline-delivery.md).
+      // A millisecond back: cursors compare strictly, and a message sent
+      // in this same millisecond hasn't been seen.
+      await this.readCursors.markSeen(user.room, user.username, Date.now() - 1);
 
       this.socketServer.to(user.room).emit(eventTypes.roomData, {
         room: user.room,

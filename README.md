@@ -73,7 +73,12 @@ versus still open.
 
 ## 🚀 Quick Start
 
-> Before running the following commands, please rename `.env.example` to `.env`
+> [!NOTE]
+> There are two `.env` files, and they're read by different things: the
+> root `.env` is only interpolated into `docker-compose.yml`, while a local
+> `pnpm dev` server reads `apps/server/.env` (its own working directory).
+> Each has a matching `.env.example` to copy — start with the one for the
+> path you're taking below.
 
 ### Installation
 
@@ -87,13 +92,8 @@ pnpm install
 
 ### Usage
 
-> [!IMPORTANT]
-> Accounts are mandatory (see Architecture above), so the server needs a
-> real PostgreSQL database and `DATABASE_URL` set even for local dev — a
-> bare `pnpm dev` with no database configured will fail to start. Point
-> `DATABASE_URL` at your own Postgres, or use the full stack below.
-
 ```bash
+cp apps/server/.env.example apps/server/.env
 pnpm dev
 ```
 
@@ -106,7 +106,8 @@ Nginx) — the client is a separate step, run against Nginx rather than
 any single replica:
 
 ```bash
-echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" > .env
+cp .env.example .env
+echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> .env
 docker compose up --build
 
 # one-time, once the stack is healthy (idempotent to re-run):
@@ -117,21 +118,7 @@ SCYLLA_CONTACT_POINTS=localhost pnpm --filter @chatme/server run db:migrate:scyl
 VITE_SOCKET_URL=http://localhost:8080 pnpm --filter @chatme/client run dev
 ```
 
-Then open `http://localhost:5173` (Vite's own default port — `CLIENT_APP_URL`
-above is what the server checks the request's origin against, so the two
-need to agree if you ever change one).
-
-> [!IMPORTANT]
-> `BETTER_AUTH_SECRET` has no default — skip it and all three server
-> replicas crash on startup, which shows up as Nginx returning a 502 on
-> every request. `docker compose logs server1` is where that actually
-> surfaces. The `.env` file above is already covered by `.gitignore`.
-
-`docker-compose.yml`'s own top comment has more detail on the migration
-commands and how to verify each piece (the load balancer actually
-distributing connections, Scylla's HA story, the message queue draining
-after a simulated Scylla outage). See also `nginx.conf` and the ADRs
-linked above.
+Then open `http://localhost:5173`
 
 ## 📝License
 

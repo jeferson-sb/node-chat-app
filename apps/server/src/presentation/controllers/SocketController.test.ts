@@ -357,7 +357,7 @@ describe('SocketController', () => {
   });
 
   describe('offline delivery', () => {
-    it('delivers only messages saved after the cursor on reconnect', async () => {
+    it('delivers the recent window with missed messages merged in, on reconnect', async () => {
       await messageHistory.saveMessage('general', {
         id: '1',
         username: 'bob',
@@ -376,8 +376,43 @@ describe('SocketController', () => {
       await controller.onJoinRoom(socket, { room: 'general' });
 
       expect(socket.emit).toHaveBeenCalledWith(eventTypes.history, [
+        expect.objectContaining({ text: 'seen before disconnect' }),
         expect.objectContaining({ text: 'missed while offline' }),
       ]);
+    });
+
+    // A page reload leaves a cursor newer than every message in the room,
+    // so a delta-only history would blank the client's transcript.
+    it('still delivers the room history to a returning user with nothing new', async () => {
+      await messageHistory.saveMessage('general', {
+        id: '1',
+        username: 'alice',
+        text: 'hey there',
+        createdAt: 100,
+      });
+      await readCursors.markSeen('general', 'alice', 500);
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(socket.emit).toHaveBeenCalledWith(eventTypes.history, [
+        expect.objectContaining({ text: 'hey there' }),
+      ]);
+    });
+
+    it('does not rewind the cursor when the recent window reaches back past it', async () => {
+      await messageHistory.saveMessage('general', {
+        id: '1',
+        username: 'alice',
+        text: 'already seen',
+        createdAt: 100,
+      });
+      await readCursors.markSeen('general', 'alice', 500);
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(500);
     });
 
     it('advances the cursor to the newest delivered message on join', async () => {
@@ -411,8 +446,34 @@ describe('SocketController', () => {
 
       await controller.onDisconnect(socket);
 
+      // `before - 1`, not `before`: the cursor is deliberately written a
+      // millisecond behind the clock so a message broadcast in the same
+      // millisecond as the disconnect still counts as missed.
       const lastSeenAt = await readCursors.getLastSeenAt('general', 'alice');
-      expect(lastSeenAt).toBeGreaterThanOrEqual(before);
+      expect(lastSeenAt).toBeGreaterThanOrEqual(before - 1);
+    });
+
+    // Frozen clock: the tie is occasional in the wild, certain here.
+    it('leaves a message sent in the same millisecond as the disconnect deliverable', async () => {
+      vi.useFakeTimers();
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+      await controller.onDisconnect(socket);
+      const disconnectedAt = Date.now();
+      vi.useRealTimers();
+
+      const sentInTheSameMillisecond = {
+        id: '1',
+        username: 'bob',
+        text: 'missed by a millisecond',
+        createdAt: disconnectedAt,
+      };
+      await messageHistory.saveMessage('general', sentInTheSameMillisecond);
+      const lastSeenAt = await readCursors.getLastSeenAt('general', 'alice');
+
+      expect(
+        await messageHistory.getMessagesSince('general', lastSeenAt ?? 0, 50),
+      ).toEqual([sentInTheSameMillisecond]);
     });
   });
 

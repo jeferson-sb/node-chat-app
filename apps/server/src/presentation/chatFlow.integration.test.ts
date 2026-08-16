@@ -295,4 +295,34 @@ describe('chat flow (integration)', () => {
       }),
     ]);
   }, 20_000);
+
+  // Counterpart to the test above: reconnecting having missed *nothing*
+  // must still show the room's history
+  // (docs/adr/2026-08-15-history-snapshot-on-join.md).
+  it('still shows a reconnecting user the messages they sent before leaving', async () => {
+    const room = uniqueRoom();
+    const alice = await connectAsUser('alice');
+    alice.emit(eventTypes.join, { room });
+    await waitForEvent(alice, eventTypes.roomData);
+
+    const ownBroadcast = waitForEvent<ChatMessage>(alice, eventTypes.message);
+    alice.emit('sendMessage', { message: 'still here after a refresh' });
+    await ownBroadcast;
+
+    alice.disconnect();
+
+    const aliceAgain = await connectAsUser('alice');
+    const historyPromise = waitForEvent<ChatMessage[]>(
+      aliceAgain,
+      eventTypes.history,
+    );
+    aliceAgain.emit(eventTypes.join, { room });
+
+    expect(await historyPromise).toEqual([
+      expect.objectContaining({
+        username: 'alice',
+        text: 'still here after a refresh',
+      }),
+    ]);
+  }, 20_000);
 });

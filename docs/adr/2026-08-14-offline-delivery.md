@@ -1,6 +1,7 @@
 # Deliver missed messages on reconnect via a per-(room, username) read cursor
 
-- Status: Accepted
+- Status: Accepted, amended by
+  [The `history` event carries a snapshot, not a delta](2026-08-15-history-snapshot-on-join.md)
 - Date: 2026-08-14
 
 ## Context

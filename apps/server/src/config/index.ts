@@ -8,6 +8,7 @@ export type Config = {
   client: string;
   redisUrl: string | undefined;
   databaseUrl: string | undefined;
+  authSecret: string | undefined;
   scyllaContactPoints: string[] | undefined;
   scyllaLocalDataCenter: string;
 };
@@ -18,6 +19,7 @@ const config: Config = {
   client: process.env.CLIENT_APP_URL || 'http://localhost',
   redisUrl: process.env.REDIS_URL,
   databaseUrl: process.env.DATABASE_URL,
+  authSecret: process.env.BETTER_AUTH_SECRET,
   scyllaContactPoints: process.env.SCYLLA_CONTACT_POINTS?.split(',').map(
     (point) => point.trim(),
   ),

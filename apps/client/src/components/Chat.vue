@@ -146,9 +146,7 @@ type PrivateRoomCodePayload = {
   code: string
 }
 
-/** Only this domain error is relevant to the pre-chat code gate below - any
- * other `error` event (e.g. a rejected `sendMessage`) is left for a future
- * change, same as today (docs/adr/2026-08-14-logging-and-domain-errors.md). */
+// Other `error` events (e.g. a rejected `sendMessage`) aren't handled here.
 const INVALID_ROOM_CODE = 'INVALID_ROOM_CODE'
 
 defineOptions({
@@ -160,9 +158,7 @@ const formatDatetime = (value: number): string =>
 
 const route = useRoute()
 
-// Identity comes from the session, not the URL - accounts are mandatory
-// (docs/adr/2026-08-09-authentication.md), and the router guard already
-// keeps unauthenticated visitors from reaching this route (router.ts).
+// Identity comes from the session, not the URL (docs/adr/2026-08-09-authentication.md).
 const username = ref('')
 const room = ref(String(route.params.room ?? ''))
 const users = ref<ChatUser[]>([])
@@ -172,23 +168,15 @@ const isActive = ref(false)
 const messageInput = ref<HTMLTextAreaElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-// Only meaningful the first time this room is ever joined - the server
-// ignores it for a room that already exists (Task 12). Set via
-// RoomPicker's radio and carried over as a query param (router.ts has no
-// dedicated "create room" route, so this is the only channel for it).
+// Only applies the first time this room is created - ignored otherwise.
 const requestedVisibility: RoomVisibility =
   route.query?.visibility === 'private' ? 'private' : 'public'
 
-// Gates the chat UI behind a code prompt when the room turns out to be
-// private and no/an invalid code was supplied - see the `error` handler
-// below. `joined` flips true once the server actually lets this socket
-// in (signaled by the `history` snapshot every successful join emits).
 const codeRequired = ref(false)
 const codeError = ref<string | null>(null)
 const joined = ref(false)
 const showCodeGate = computed(() => codeRequired.value && !joined.value)
-// Only ever set for a private room, and only to this socket - see
-// eventTypes.ts's privateRoomCode doc comment on the server.
+// Only ever sent to the socket that created/joined a private room.
 const accessCode = ref<string | null>(null)
 
 useAutoScroll(messagesContainer, messages, { smooth: true })
@@ -211,15 +199,9 @@ onMounted(async () => {
   const { data } = await authClient.getSession()
   username.value = data?.user.name ?? ''
 
-  // Force websocket-only (skip the HTTP long-polling handshake) so the
-  // client keeps a single persistent connection to whichever server the
-  // load balancer picks — sticky sessions are only required for
-  // long-polling's repeated HTTP requests, not a single websocket
-  // connection. See docs/adr/2026-08-09-modernize-stack.md and
-  // docker-compose.yml's round-robin Nginx upstream.
-  // withCredentials sends the session cookie on the handshake - the
-  // server verifies it (socketAuth.ts) instead of trusting a
-  // client-supplied username.
+  // websocket-only avoids sticky sessions across the load-balanced servers
+  // (docs/adr/2026-08-09-modernize-stack.md); withCredentials sends the
+  // session cookie for the server to verify (socketAuth.ts).
   socket = io(import.meta.env.VITE_SOCKET_URL, {
     transports: ['websocket'],
     withCredentials: true,
@@ -229,10 +211,9 @@ onMounted(async () => {
 
   socket.on('history', (history: ChatMessage[]) => {
     messages.value = history
-    // The server only ever emits `history` right after a successful join
-    // (SocketController.onJoinRoom) - there's no separate "joined" ack,
-    // so this is the signal that dismisses the code gate, if it was up.
+    // Doubles as the join ack - dismisses the code gate, if it was up.
     joined.value = true
+    document.title = `${room.value} · ChatMe`
   })
 
   socket.on('message', (msg: ChatMessage) => {
@@ -259,6 +240,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   socket?.disconnect()
+  document.title = 'ChatMe'
 })
 
 const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
@@ -273,9 +255,6 @@ const sendMessage = (e: KeyboardEvent | SubmitEvent): void => {
 </script>
 
 <style scoped>
-/* Rows are fixed (header, then body) so the sidebar and the message
-   column share one full-height row at every width, and the sidebar
-   column collapses to zero once it's hidden. */
 .chat {
   --sidebar-size: 20cqi;
   --bubble-tail: 15px;
@@ -400,8 +379,6 @@ header {
   flex-shrink: 0;
   margin-block-start: 1rem;
   margin-inline-end: 0.3125rem;
-  /* The send button lives inside the form, so this trailing space is the
-     container's, not a gap between siblings. */
   padding-block: 1.5rem;
   padding-inline: 1.5rem 2.5rem;
 
@@ -503,8 +480,7 @@ header {
   background-color: var(--online);
 }
 
-/* Visually hidden but still available to screen readers - the dot alone
-   isn't enough to convey online/offline. */
+/* Visually hidden but still available to screen readers. */
 .sr-only {
   position: absolute;
   inline-size: 1px;
@@ -591,10 +567,8 @@ header {
   }
 }
 
-/* Code gate (RoomCodeGate.vue), shown instead of .chat while a private
-   room's access code hasn't been validated yet - shell styling lives
-   here rather than in the child component, same split as AuthPage.vue
-   owns its own LoginForm/SignupForm's shell. */
+/* Shell for RoomCodeGate.vue, shown instead of .chat while a private
+   room's access code hasn't been validated yet. */
 .centered-form {
   background-color: var(--bg-color);
   background-image: url('../assets/bg-illustration.svg');

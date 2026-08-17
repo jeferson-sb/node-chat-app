@@ -7,6 +7,17 @@ import { InMemoryMessageQueue } from '../../infra/queue/InMemoryMessageQueue.ts'
 import { eventTypes } from '../../utils/eventTypes.ts';
 import { ValidationError } from '../../domain/errors/ValidationError.ts';
 import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
+import { slugifyRoomName } from '../../domain/slugifyRoomName.ts';
+
+// `onJoinRoom` now slugifies the display name a client sends (e.g.
+// 'general') before using it as the Socket.io room / roster / history key
+// (docs/adr/2026-08-16-room-name-slugs.md) - these are what 'general'/
+// 'random' below actually become internally, so assertions against the
+// resulting key use these rather than hardcoding the hash. The `{ room:
+// 'general' }` payload itself is left as-is throughout: that's the raw
+// display name a client would send, which is exactly what's under test.
+const GENERAL = slugifyRoomName('general');
+const RANDOM = slugifyRoomName('random');
 
 /**
  * Builds a minimal mock of the subset of socket.io's `Socket` and `Server`
@@ -87,12 +98,14 @@ describe('SocketController', () => {
   });
 
   describe('onJoinRoom', () => {
-    it('joins the socket to the room and welcomes the user', async () => {
+    it('slugifies the display name before joining and welcomes the user', async () => {
       const socket = createMockSocket('socket-1', 'alice');
 
-      await controller.onJoinRoom(socket, { room: 'general' });
+      await controller.onJoinRoom(socket, { room: 'CS Study Group' });
 
-      expect(socket.join).toHaveBeenCalledWith('general');
+      expect(socket.join).toHaveBeenCalledWith(
+        slugifyRoomName('CS Study Group'),
+      );
       expect(socket.emit).toHaveBeenCalledWith(
         eventTypes.message,
         expect.objectContaining({
@@ -102,12 +115,24 @@ describe('SocketController', () => {
       );
     });
 
+    it('resolves two differently-cased/spaced display names to the same room', async () => {
+      const alice = createMockSocket('socket-1', 'alice');
+      const bob = createMockSocket('socket-2', 'bob');
+
+      await controller.onJoinRoom(alice, { room: 'General Chat' });
+      await controller.onJoinRoom(bob, { room: '  general   chat  ' });
+
+      expect(
+        await controller.getUsersOnRoom(slugifyRoomName('General Chat')),
+      ).toHaveLength(2);
+    });
+
     it('broadcasts a join message to the rest of the room', async () => {
       const socket = createMockSocket('socket-1', 'alice');
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      const roomEmitter = socket.to('general');
+      const roomEmitter = socket.to(GENERAL);
       expect(roomEmitter.emit).toHaveBeenCalledWith(
         eventTypes.message,
         expect.objectContaining({
@@ -122,16 +147,16 @@ describe('SocketController', () => {
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      expect(socketServer.to).toHaveBeenCalledWith('general');
-      const roomEmitter = socketServer.to('general');
+      expect(socketServer.to).toHaveBeenCalledWith(GENERAL);
+      const roomEmitter = socketServer.to(GENERAL);
       expect(roomEmitter.emit).toHaveBeenCalledWith(
         eventTypes.roomData,
         expect.objectContaining({
-          room: 'general',
+          room: GENERAL,
           users: [
             {
               username: 'alice',
-              room: 'general',
+              room: GENERAL,
               socketId: 'socket-1',
               online: true,
             },
@@ -148,7 +173,7 @@ describe('SocketController', () => {
       const secondConnection = createMockSocket('socket-2', 'alice');
       await controller.onJoinRoom(secondConnection, { room: 'general' });
 
-      const roomEmitter = secondConnection.to('general');
+      const roomEmitter = secondConnection.to(GENERAL);
       expect(roomEmitter.emit).not.toHaveBeenCalledWith(
         eventTypes.message,
         expect.objectContaining({ text: expect.stringContaining('joined') }),
@@ -163,10 +188,10 @@ describe('SocketController', () => {
       const secondConnection = createMockSocket('socket-2', 'alice');
       await controller.onJoinRoom(secondConnection, { room: 'general' });
 
-      expect(await controller.getUsersOnRoom('general')).toEqual([
+      expect(await controller.getUsersOnRoom(GENERAL)).toEqual([
         {
           username: 'alice',
-          room: 'general',
+          room: GENERAL,
           socketId: 'socket-2',
           online: true,
         },
@@ -180,17 +205,17 @@ describe('SocketController', () => {
       await controller.onJoinRoom(alice, { room: 'general' });
       await controller.onJoinRoom(bob, { room: 'general' });
 
-      expect(await controller.getUsersOnRoom('general')).toHaveLength(2);
+      expect(await controller.getUsersOnRoom(GENERAL)).toHaveLength(2);
     });
 
     it('emits persisted history to the joining socket, oldest first', async () => {
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '1',
         username: 'alice',
         text: 'first',
         createdAt: 1,
       });
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '2',
         username: 'alice',
         text: 'second',
@@ -211,7 +236,7 @@ describe('SocketController', () => {
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      expect(await messageHistory.getRecentMessages('general', 10)).toEqual([]);
+      expect(await messageHistory.getRecentMessages(GENERAL, 10)).toEqual([]);
     });
 
     it('rejects a missing room with a ValidationError', async () => {
@@ -220,6 +245,14 @@ describe('SocketController', () => {
       await expect(controller.onJoinRoom(socket, { room: '' })).rejects.toThrow(
         ValidationError,
       );
+    });
+
+    it('rejects a whitespace-only room with a ValidationError', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await expect(
+        controller.onJoinRoom(socket, { room: '   ' }),
+      ).rejects.toThrow(ValidationError);
     });
   });
 
@@ -231,8 +264,8 @@ describe('SocketController', () => {
 
       await controller.onSendMessage(socket, { message: 'hello everyone' });
 
-      expect(socketServer.to).toHaveBeenCalledWith('general');
-      const roomEmitter = socketServer.to('general');
+      expect(socketServer.to).toHaveBeenCalledWith(GENERAL);
+      const roomEmitter = socketServer.to(GENERAL);
       expect(roomEmitter.emit).toHaveBeenCalledWith(
         eventTypes.message,
         expect.objectContaining({
@@ -258,7 +291,7 @@ describe('SocketController', () => {
 
       await controller.onSendMessage(socket, { message: 'hello everyone' });
 
-      expect(await messageHistory.getRecentMessages('general', 10)).toEqual([
+      expect(await messageHistory.getRecentMessages(GENERAL, 10)).toEqual([
         expect.objectContaining({
           username: 'alice',
           text: 'hello everyone',
@@ -284,8 +317,8 @@ describe('SocketController', () => {
         failingController.onSendMessage(socket, { message: 'hello everyone' }),
       ).rejects.toThrow('queue unavailable');
 
-      expect(socketServer.to).toHaveBeenCalledWith('general');
-      const roomEmitter = socketServer.to('general');
+      expect(socketServer.to).toHaveBeenCalledWith(GENERAL);
+      const roomEmitter = socketServer.to(GENERAL);
       expect(roomEmitter.emit).toHaveBeenCalledWith(
         eventTypes.message,
         expect.objectContaining({ username: 'alice', text: 'hello everyone' }),
@@ -316,10 +349,10 @@ describe('SocketController', () => {
 
       await controller.onDisconnect(socket);
 
-      expect(await controller.getUsersOnRoom('general')).toEqual([
+      expect(await controller.getUsersOnRoom(GENERAL)).toEqual([
         {
           username: 'alice',
-          room: 'general',
+          room: GENERAL,
           socketId: 'socket-1',
           online: false,
         },
@@ -334,12 +367,12 @@ describe('SocketController', () => {
 
       await controller.onDisconnect(socket);
 
-      expect(socketServer.to).toHaveBeenCalledWith('general');
-      const roomEmitter = socketServer.to('general');
+      expect(socketServer.to).toHaveBeenCalledWith(GENERAL);
+      const roomEmitter = socketServer.to(GENERAL);
       expect(roomEmitter.emit).toHaveBeenCalledWith(
         eventTypes.roomData,
         expect.objectContaining({
-          room: 'general',
+          room: GENERAL,
           users: [
             expect.objectContaining({ username: 'alice', online: false }),
           ],
@@ -358,14 +391,14 @@ describe('SocketController', () => {
 
   describe('offline delivery', () => {
     it('delivers the recent window with missed messages merged in, on reconnect', async () => {
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '1',
         username: 'bob',
         text: 'seen before disconnect',
         createdAt: 100,
       });
-      await readCursors.markSeen('general', 'alice', 100);
-      await messageHistory.saveMessage('general', {
+      await readCursors.markSeen(GENERAL, 'alice', 100);
+      await messageHistory.saveMessage(GENERAL, {
         id: '2',
         username: 'bob',
         text: 'missed while offline',
@@ -384,13 +417,13 @@ describe('SocketController', () => {
     // A page reload leaves a cursor newer than every message in the room,
     // so a delta-only history would blank the client's transcript.
     it('still delivers the room history to a returning user with nothing new', async () => {
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '1',
         username: 'alice',
         text: 'hey there',
         createdAt: 100,
       });
-      await readCursors.markSeen('general', 'alice', 500);
+      await readCursors.markSeen(GENERAL, 'alice', 500);
       const socket = createMockSocket('socket-1', 'alice');
 
       await controller.onJoinRoom(socket, { room: 'general' });
@@ -401,42 +434,42 @@ describe('SocketController', () => {
     });
 
     it('does not rewind the cursor when the recent window reaches back past it', async () => {
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '1',
         username: 'alice',
         text: 'already seen',
         createdAt: 100,
       });
-      await readCursors.markSeen('general', 'alice', 500);
+      await readCursors.markSeen(GENERAL, 'alice', 500);
       const socket = createMockSocket('socket-1', 'alice');
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(500);
+      expect(await readCursors.getLastSeenAt(GENERAL, 'alice')).toBe(500);
     });
 
     it('advances the cursor to the newest delivered message on join', async () => {
-      await messageHistory.saveMessage('general', {
+      await messageHistory.saveMessage(GENERAL, {
         id: '1',
         username: 'bob',
         text: 'missed',
         createdAt: 150,
       });
-      await readCursors.markSeen('general', 'alice', 100);
+      await readCursors.markSeen(GENERAL, 'alice', 100);
       const socket = createMockSocket('socket-1', 'alice');
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(150);
+      expect(await readCursors.getLastSeenAt(GENERAL, 'alice')).toBe(150);
     });
 
     it('does not advance the cursor on join when there is nothing new to deliver', async () => {
-      await readCursors.markSeen('general', 'alice', 100);
+      await readCursors.markSeen(GENERAL, 'alice', 100);
       const socket = createMockSocket('socket-1', 'alice');
 
       await controller.onJoinRoom(socket, { room: 'general' });
 
-      expect(await readCursors.getLastSeenAt('general', 'alice')).toBe(100);
+      expect(await readCursors.getLastSeenAt(GENERAL, 'alice')).toBe(100);
     });
 
     it('advances the cursor at disconnect so live-received messages are not redelivered on the next reconnect', async () => {
@@ -449,7 +482,7 @@ describe('SocketController', () => {
       // `before - 1`, not `before`: the cursor is deliberately written a
       // millisecond behind the clock so a message broadcast in the same
       // millisecond as the disconnect still counts as missed.
-      const lastSeenAt = await readCursors.getLastSeenAt('general', 'alice');
+      const lastSeenAt = await readCursors.getLastSeenAt(GENERAL, 'alice');
       expect(lastSeenAt).toBeGreaterThanOrEqual(before - 1);
     });
 
@@ -468,11 +501,11 @@ describe('SocketController', () => {
         text: 'missed by a millisecond',
         createdAt: disconnectedAt,
       };
-      await messageHistory.saveMessage('general', sentInTheSameMillisecond);
-      const lastSeenAt = await readCursors.getLastSeenAt('general', 'alice');
+      await messageHistory.saveMessage(GENERAL, sentInTheSameMillisecond);
+      const lastSeenAt = await readCursors.getLastSeenAt(GENERAL, 'alice');
 
       expect(
-        await messageHistory.getMessagesSince('general', lastSeenAt ?? 0, 50),
+        await messageHistory.getMessagesSince(GENERAL, lastSeenAt ?? 0, 50),
       ).toEqual([sentInTheSameMillisecond]);
     });
   });
@@ -484,11 +517,19 @@ describe('SocketController', () => {
       await controller.onJoinRoom(alice, { room: 'general' });
       await controller.onJoinRoom(bob, { room: 'random' });
 
-      expect(await controller.getUsersOnRoom('general')).toEqual([
+      expect(await controller.getUsersOnRoom(GENERAL)).toEqual([
         {
           username: 'alice',
-          room: 'general',
+          room: GENERAL,
           socketId: 'socket-1',
+          online: true,
+        },
+      ]);
+      expect(await controller.getUsersOnRoom(RANDOM)).toEqual([
+        {
+          username: 'bob',
+          room: RANDOM,
+          socketId: 'socket-2',
           online: true,
         },
       ]);

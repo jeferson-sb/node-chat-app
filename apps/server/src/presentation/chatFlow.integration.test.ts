@@ -5,6 +5,7 @@ import { createApp, type App } from './createApp.ts';
 import { createTestAuthDatabase } from '../infra/auth/createTestAuthDatabase.ts';
 import { eventTypes } from '../utils/eventTypes.ts';
 import type { ReadCursorRepository } from '../infra/cursor/ReadCursorRepository.ts';
+import { slugifyRoomName } from '../domain/slugifyRoomName.ts';
 
 type ChatMessage = {
   id: string;
@@ -128,6 +129,12 @@ describe('chat flow (integration)', () => {
 
   const uniqueRoom = (): string => `general-${crypto.randomUUID()}`;
 
+  // The server slugifies the display name sent on `join` before using it
+  // as the actual Socket.io room / roster key, appending its own hash
+  // suffix on top of whatever uniqueRoom() already looks like (docs/adr/
+  // 2026-08-16-room-name-slugs.md) - so assertions against the wire
+  // payload's `room` field compare against slugifyRoomName(room), below.
+
   it('rejects a connection without a valid session', async () => {
     const client = ioClient(baseUrl, {
       forceNew: true,
@@ -144,6 +151,7 @@ describe('chat flow (integration)', () => {
 
   it('welcomes a joining user and broadcasts roomData', async () => {
     const room = uniqueRoom();
+    const roomSlug = slugifyRoomName(room); // see uniqueRoom()'s doc comment
     const alice = await connectAsUser('alice');
 
     const welcomePromise = waitForEvent<ChatMessage>(alice, eventTypes.message);
@@ -156,7 +164,7 @@ describe('chat flow (integration)', () => {
     expect(welcome.username).toBe('Admin');
     expect(welcome.text).toContain('alice');
     expect(roomData.users).toEqual([
-      { username: 'alice', room, socketId: alice.id, online: true },
+      { username: 'alice', room: roomSlug, socketId: alice.id, online: true },
     ]);
   });
 
@@ -195,6 +203,7 @@ describe('chat flow (integration)', () => {
 
   it('marks a disconnected user offline in roomData instead of sending a "has left" message', async () => {
     const room = uniqueRoom();
+    const roomSlug = slugifyRoomName(room); // see uniqueRoom()'s doc comment
     const alice = await connectAsUser('alice');
     alice.emit(eventTypes.join, { room });
     await waitForEvent(alice, eventTypes.roomData);
@@ -218,7 +227,7 @@ describe('chat flow (integration)', () => {
     alice.off(eventTypes.message, unexpectedMessage);
     expect(roomData.users).toEqual(
       expect.arrayContaining([
-        { username: 'alice', room, socketId: alice.id, online: true },
+        { username: 'alice', room: roomSlug, socketId: alice.id, online: true },
         expect.objectContaining({ username: 'bob', online: false }),
       ]),
     );
@@ -226,6 +235,7 @@ describe('chat flow (integration)', () => {
 
   it('does not send a "has joined" message when a returning user rejoins a room', async () => {
     const room = uniqueRoom();
+    const roomSlug = slugifyRoomName(room); // see uniqueRoom()'s doc comment
     const alice = await connectAsUser('alice');
     alice.emit(eventTypes.join, { room });
     await waitForEvent(alice, eventTypes.roomData);
@@ -248,7 +258,7 @@ describe('chat flow (integration)', () => {
     expect(roomData.users).toEqual([
       {
         username: 'alice',
-        room,
+        room: roomSlug,
         socketId: aliceAgain.id,
         online: true,
       },

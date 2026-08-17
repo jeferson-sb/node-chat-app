@@ -130,16 +130,24 @@ new one solely to signal success.
   to a plain public room, so `chatme:room-config` gets an entry per room
   ever joined, same never-shrinks-back precedent already accepted for
   `chatme:members` (`docs/adr/2026-08-12-presence-indicators.md`).
-- The 6-digit code is generated with `Math.random`, not a CSPRNG, and
-  checked with a plain `!==` (not constant-time). Acceptable here: it's
-  a share-with-friends room-access code with no rate-limiting
-  requirement in the task, not a security credential protecting
-  sensitive data - brute-forcing over a live socket connection is
-  cheaply rate-limitable later if it ever becomes a real concern, but
-  isn't solved by this change.
-- No rate limiting on repeated wrong-code join attempts. Not required
-  by the acceptance criteria; flagged here as a deliberate gap rather
-  than an oversight.
+- The 6-digit code is generated with `crypto.randomInt`, not
+  `Math.random`. This is not defence-in-depth caution: creators are
+  shown their own room's code, so `Math.random` would let a caller
+  create rooms to farm outputs from the shared PRNG stream, recover
+  V8's internal xorshift128+ state, and *derive* other rooms' codes
+  instead of guessing them - collapsing the 10^6 space to a
+  computation. `randomInt` costs nothing extra and removes the class.
+- The code is compared with a plain `!==`, not a constant-time compare.
+  Accepted: a timing side-channel over a network socket, against a
+  6-digit numeric secret, is not a practical way to recover the code
+  when online guessing is the cheaper attack (see below).
+- No rate limiting on repeated wrong-code join attempts, so the 10^6
+  code space is open to online enumeration over a live socket. Not
+  required by the acceptance criteria and out of scope here, but this
+  is the real remaining weakness in the access-code design - it should
+  be closed (per-socket/IP attempt throttling or lockout on repeated
+  `INVALID_ROOM_CODE`) before private rooms are exposed to untrusted
+  users. Flagged as a deliberate gap, not an oversight.
 - `RedisRoomRepository.getOrCreateRoomConfig` has no automated test
   against a real Redis, same precedent already established for this
   class's other methods and for `RedisReadCursorRepository`

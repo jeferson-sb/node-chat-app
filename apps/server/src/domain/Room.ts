@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto';
+
 export type RoomVisibility = 'public' | 'private';
 
 /**
@@ -31,11 +33,11 @@ const ROOM_CODE_LENGTH = 6;
  * Generates a random 6-digit access code for a newly created private
  * room. Zero-padded so it's always exactly 6 digits (e.g. "004829"),
  * matching the 6-digit code described in docs/TASK_TRACKER.md Task 12.
- * Not cryptographically hardened against brute-forcing - see
- * docs/adr/2026-08-16-private-rooms.md for why that trade-off is
- * acceptable here.
+ * Uses a CSPRNG because the code is an access-control credential and
+ * creators are shown their own code: Math.random would let a caller farm
+ * outputs from the shared PRNG stream and derive other rooms' codes.
  */
 export const generateRoomCode = (): string =>
-  Math.floor(Math.random() * 10 ** ROOM_CODE_LENGTH)
+  randomInt(0, 10 ** ROOM_CODE_LENGTH)
     .toString()
     .padStart(ROOM_CODE_LENGTH, '0');

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message, type MessageSnapshot } from '../../domain/Message.ts';
+import { slugifyRoomName } from '../../domain/slugifyRoomName.ts';
 import { mergeHistory } from './mergeHistory.ts';
 import { ValidationError } from '../../domain/errors/ValidationError.ts';
 import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
@@ -17,6 +18,15 @@ import { logger } from '../../infra/logging/createLogger.ts';
 export type { ChatUser };
 
 export type JoinRoomPayload = {
+  /**
+   * The room's display name as the client typed/knows it (e.g. "CS Study
+   * Group") - not yet a storage key. `onJoinRoom` slugifies this into the
+   * ASCII, URL-safe name (see slugifyRoomName.ts) actually used as the
+   * Socket.io room and as the key for the room roster, message history,
+   * and read cursors, so those internal services never have to deal with
+   * whitespace/casing/unicode variance in a user-chosen name (docs/adr/
+   * 2026-08-16-room-name-slugs.md).
+   */
   room: string;
 };
 
@@ -57,9 +67,15 @@ export default class SocketController {
   }
 
   async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
-    if (!room) {
+    if (!room || room.trim().length === 0) {
       throw new ValidationError('Room is required');
     }
+
+    // Everything downstream (Socket.io room, roster, history, cursors)
+    // keys off the slug, never the raw display name a client sent - see
+    // JoinRoomPayload's doc comment and docs/adr/2026-08-16-room-name-
+    // slugs.md.
+    const slug = slugifyRoomName(room);
 
     // No "username already in use" check here: the username now comes
     // from a verified account (socketAuth.ts), not client input, so the
@@ -68,21 +84,21 @@ export default class SocketController {
     const { name: username } = getSocketUser(socket);
     const isFirstJoin = await this.rooms.addUser({
       username,
-      room,
+      room: slug,
       socketId: socket.id,
       online: true,
     });
 
-    socket.join(room);
+    socket.join(slug);
 
     // `history` is a snapshot, not a delta - the client assigns it over
     // its whole transcript (docs/adr/2026-08-15-history-snapshot-on-join.md).
-    const lastSeenAt = await this.readCursors.getLastSeenAt(room, username);
+    const lastSeenAt = await this.readCursors.getLastSeenAt(slug, username);
     const [recent, missed] = await Promise.all([
-      this.messageHistory.getRecentMessages(room, HISTORY_LIMIT),
+      this.messageHistory.getRecentMessages(slug, HISTORY_LIMIT),
       lastSeenAt === undefined
         ? Promise.resolve<MessageSnapshot[]>([])
-        : this.messageHistory.getMessagesSince(room, lastSeenAt, HISTORY_LIMIT),
+        : this.messageHistory.getMessagesSince(slug, lastSeenAt, HISTORY_LIMIT),
     ]);
     const history = mergeHistory(recent, missed, HISTORY_LIMIT);
     socket.emit(eventTypes.history, history.slice().reverse());
@@ -92,7 +108,7 @@ export default class SocketController {
     const [newestDelivered] = history;
     if (newestDelivered && newestDelivered.createdAt > (lastSeenAt ?? 0)) {
       await this.readCursors.markSeen(
-        room,
+        slug,
         username,
         newestDelivered.createdAt,
       );
@@ -116,12 +132,12 @@ export default class SocketController {
         text: `${username} has joined the chat!`,
         createdAt: Date.now(),
       });
-      socket.to(room).emit(eventTypes.message, joinMessage.snapshot());
+      socket.to(slug).emit(eventTypes.message, joinMessage.snapshot());
     }
 
-    this.socketServer.to(room).emit(eventTypes.roomData, {
-      room,
-      users: await this.getUsersOnRoom(room),
+    this.socketServer.to(slug).emit(eventTypes.roomData, {
+      room: slug,
+      users: await this.getUsersOnRoom(slug),
     });
   }
 

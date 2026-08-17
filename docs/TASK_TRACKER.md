@@ -135,3 +135,26 @@ Acceptance criteria:
 - [x] Connected clients get a real disconnect event on shutdown, not an
       abrupt connection drop.
 - [x] A hung shutdown force-exits instead of leaving the process stuck.
+
+## Task 13 - Room name parsing
+
+Rooms have a display name (e.g. "CS Study Group") and a "parsed name"
+used internally by the backend, derived from the display name by
+stripping special characters and appending a short deterministic hash
+(e.g. `cs-study-group-<hash>`), so the backend has a readable, URL-safe,
+ASCII-only identifier for a room independent of whatever free-text a
+user typed.
+
+Priority: Medium
+Completed: [x] Added `slugifyRoomName`
+(`apps/server/src/domain/slugifyRoomName.ts`) and wired
+`SocketController.onJoinRoom` to slugify the display name a client sends
+before using it as the Socket.io room / roster / message-history / read-
+cursor key, everywhere that key was previously the raw display name. See
+docs/adr/2026-08-16-room-name-slugs.md for the hash derivation and the
+explicit decision not to migrate existing (pre-slug) persisted room
+data, since the project has no real users yet.
+
+Acceptance criteria:
+- [x] Backend should have a more easily readable room name for use on
+      internal services than the display name.

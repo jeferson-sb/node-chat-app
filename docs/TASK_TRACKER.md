@@ -145,14 +145,27 @@ Acceptance criteria:
 
 ## Task 12 - Room visibility
 
-Priority: High
-Completed: [ ]
+Users should be able to create a private room where only users with the
+code (6-digit code) can enter.
 
-Users should be able to create a private room where only users with the code (6-digit code) can enter.
+Priority: High
+Completed: [x] Visibility (`public`/`private`) and a server-generated
+6-digit access code are decided on a room's first-ever join and
+persisted alongside the existing room roster (`RoomRepository.
+getOrCreateRoomConfig`, both the in-memory and Redis-backed
+implementations). Code validation happens only in
+`SocketController.onJoinRoom`, via a new `InvalidRoomCodeError` domain
+error surfaced over Socket.io the same way `RoomNotFoundError`/
+`ValidationError` already are. See
+docs/adr/2026-08-16-private-rooms.md.
 
 Acceptance criteria:
-- [ ] Have a option (radio) to choose between public/private room creation
-- [ ] If you are joining an existing room that is not public show a code input to validate and enter or an error message
+- [x] Have an option (radio) to choose between public/private room
+      creation - `RoomPicker.vue`.
+- [x] If you are joining an existing room that is not public, show a
+      code input to validate and enter, or an error message -
+      `RoomCodeGate.vue`, shown by `Chat.vue` when the server rejects a
+      join with `INVALID_ROOM_CODE`.
 
 ## Task 13 - Room name parsing
 

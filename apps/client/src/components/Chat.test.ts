@@ -194,4 +194,75 @@ describe('Chat', () => {
 
     expect(disconnectMock).toHaveBeenCalled()
   })
+
+  describe('private rooms', () => {
+    it('shows a code gate instead of the chat when the server rejects the join for a missing code', async () => {
+      const wrapper = await mountChat()
+
+      socketHandlers.get('error')?.({
+        code: 'INVALID_ROOM_CODE',
+        message: 'Room "general" requires an access code',
+      })
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('.chat').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Room "general" requires an access code')
+    })
+
+    it('ignores error events unrelated to the room code', async () => {
+      const wrapper = await mountChat()
+
+      socketHandlers.get('error')?.({
+        code: 'ROOM_NOT_FOUND',
+        message: 'no active room membership',
+      })
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('.chat').exists()).toBe(true)
+    })
+
+    it('resubmits the join with the entered code from the gate', async () => {
+      const wrapper = await mountChat()
+      socketHandlers.get('error')?.({
+        code: 'INVALID_ROOM_CODE',
+        message: 'Room "general" requires an access code',
+      })
+      await wrapper.vm.$nextTick()
+      emitMock.mockClear()
+
+      await wrapper.find('input[name="code"]').setValue('123456')
+      await wrapper.find('form').trigger('submit.prevent')
+
+      expect(emitMock).toHaveBeenCalledWith('join', {
+        room: 'general',
+        code: '123456',
+      })
+    })
+
+    it('dismisses the code gate once the server accepts the join', async () => {
+      const wrapper = await mountChat()
+      socketHandlers.get('error')?.({
+        code: 'INVALID_ROOM_CODE',
+        message: 'Room "general" requires an access code',
+      })
+      await wrapper.vm.$nextTick()
+
+      socketHandlers.get('history')?.([])
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('.chat').exists()).toBe(true)
+    })
+
+    it('displays the access code received for a private room', async () => {
+      const wrapper = await mountChat()
+
+      socketHandlers.get('privateRoomCode')?.({
+        room: 'general',
+        code: '654321',
+      })
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.text()).toContain('654321')
+    })
+  })
 })

@@ -1,4 +1,5 @@
 import type { ChatUser } from '../../domain/ChatUser.ts';
+import type { RoomConfig, RoomConfigLookup } from '../../domain/Room.ts';
 
 /**
  * Room roster storage, abstracted so SocketController can run against
@@ -32,4 +33,17 @@ export type RoomRepository = {
   /** Matches only online members - see the module doc comment. */
   findUserByUsername(username: string): Promise<ChatUser | undefined>;
   getUsersInRoom(room: string): Promise<ChatUser[]>;
+  /**
+   * Atomically claims a room's visibility/access code the first time
+   * anyone requests it, and returns whichever config actually won the
+   * race across concurrent joiners/nodes - a room's visibility is
+   * decided once, at creation, not on every join (docs/adr/2026-08-16-
+   * private-rooms.md). Callers pass the config they'd like to create
+   * (generating a fresh code for a requested private room is on them,
+   * mirroring how SocketController generates message ids); if a config
+   * already exists for `config.room`, that existing one is returned
+   * instead and the candidate is discarded. `created` tells the caller
+   * which of those two happened - see RoomConfigLookup.
+   */
+  getOrCreateRoomConfig(config: RoomConfig): Promise<RoomConfigLookup>;
 };

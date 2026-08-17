@@ -7,6 +7,7 @@ import { InMemoryMessageQueue } from '../../infra/queue/InMemoryMessageQueue.ts'
 import { eventTypes } from '../../utils/eventTypes.ts';
 import { ValidationError } from '../../domain/errors/ValidationError.ts';
 import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
+import { InvalidRoomCodeError } from '../../domain/errors/InvalidRoomCodeError.ts';
 import { slugifyRoomName } from '../../domain/slugifyRoomName.ts';
 
 // `onJoinRoom` now slugifies the display name a client sends (e.g.
@@ -18,6 +19,7 @@ import { slugifyRoomName } from '../../domain/slugifyRoomName.ts';
 // display name a client would send, which is exactly what's under test.
 const GENERAL = slugifyRoomName('general');
 const RANDOM = slugifyRoomName('random');
+const SECRET = slugifyRoomName('secret');
 
 /**
  * Builds a minimal mock of the subset of socket.io's `Socket` and `Server`
@@ -253,6 +255,107 @@ describe('SocketController', () => {
       await expect(
         controller.onJoinRoom(socket, { room: '   ' }),
       ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('private rooms', () => {
+    it('creates a private room and emits its generated code to the creator', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, {
+        room: 'secret',
+        visibility: 'private',
+      });
+
+      expect(socket.emit).toHaveBeenCalledWith(
+        eventTypes.privateRoomCode,
+        expect.objectContaining({
+          room: SECRET,
+          code: expect.stringMatching(/^\d{6}$/),
+        }),
+      );
+      expect(socket.join).toHaveBeenCalledWith(SECRET);
+    });
+
+    it('rejects joining an existing private room without a code', async () => {
+      const creator = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(creator, {
+        room: 'secret',
+        visibility: 'private',
+      });
+
+      const joiner = createMockSocket('socket-2', 'bob');
+
+      await expect(
+        controller.onJoinRoom(joiner, { room: 'secret' }),
+      ).rejects.toThrow(InvalidRoomCodeError);
+      expect(joiner.join).not.toHaveBeenCalled();
+    });
+
+    it('rejects joining an existing private room with the wrong code', async () => {
+      const creator = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(creator, {
+        room: 'secret',
+        visibility: 'private',
+      });
+
+      const joiner = createMockSocket('socket-2', 'bob');
+
+      await expect(
+        controller.onJoinRoom(joiner, { room: 'secret', code: 'wrong1' }),
+      ).rejects.toThrow(InvalidRoomCodeError);
+      expect(joiner.join).not.toHaveBeenCalled();
+    });
+
+    it('lets a joiner in with the correct code', async () => {
+      const creator = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(creator, {
+        room: 'secret',
+        visibility: 'private',
+      });
+      const [, { code }] = vi
+        .mocked(creator.emit)
+        .mock.calls.find(([event]) => event === eventTypes.privateRoomCode) as [
+        string,
+        { room: string; code: string },
+      ];
+
+      const joiner = createMockSocket('socket-2', 'bob');
+      await controller.onJoinRoom(joiner, { room: 'secret', code });
+
+      expect(joiner.join).toHaveBeenCalledWith(SECRET);
+    });
+
+    it('ignores a later joiner trying to make an existing public room private', async () => {
+      const creator = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(creator, {
+        room: 'general',
+        visibility: 'public',
+      });
+
+      const joiner = createMockSocket('socket-2', 'bob');
+
+      // No code supplied and no error thrown: the room stayed public,
+      // so no code is required to join it.
+      await expect(
+        controller.onJoinRoom(joiner, {
+          room: 'general',
+          visibility: 'private',
+        }),
+      ).resolves.toBeUndefined();
+      expect(joiner.join).toHaveBeenCalledWith(GENERAL);
+    });
+
+    it('does not require a code for a plain public room', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(socket.join).toHaveBeenCalledWith(GENERAL);
+      expect(socket.emit).not.toHaveBeenCalledWith(
+        eventTypes.privateRoomCode,
+        expect.anything(),
+      );
     });
   });
 

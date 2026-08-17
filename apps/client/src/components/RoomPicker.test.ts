@@ -29,4 +29,28 @@ describe('RoomPicker', () => {
       wrapper.find('input[name="room"]').attributes('required'),
     ).toBeDefined()
   })
+
+  it('defaults to public visibility', () => {
+    const wrapper = mount(RoomPicker)
+
+    const publicOption = wrapper.find(
+      'input[name="visibility"][value="public"]',
+    )
+    expect((publicOption.element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('navigates with a visibility query when private is chosen', async () => {
+    const wrapper = mount(RoomPicker)
+
+    await wrapper.find('input[name="room"]').setValue('secret-club')
+    await wrapper
+      .find('input[name="visibility"][value="private"]')
+      .setValue(true)
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/chat/secret-club',
+      query: { visibility: 'private' },
+    })
+  })
 })

@@ -118,6 +118,12 @@ aren't redelivered on the next reconnect. Falls back to today's fixed-
 window behavior when Redis isn't configured (see
 docs/adr/2026-08-14-offline-delivery.md).
 
+Amended: the join payload is the recent window with missed messages
+merged into it, not the missed messages alone - the client replaces its
+whole transcript with it, so a delta-only payload blanked the room for
+anyone reconnecting with nothing new (see
+docs/adr/2026-08-15-history-snapshot-on-join.md).
+
 Acceptance criteria:
 - [x] A user reconnecting after being offline receives messages sent
       to their room while they were disconnected.
@@ -135,3 +141,51 @@ Acceptance criteria:
 - [x] Connected clients get a real disconnect event on shutdown, not an
       abrupt connection drop.
 - [x] A hung shutdown force-exits instead of leaving the process stuck.
+
+
+## Task 12 - Room visibility
+
+Priority: High
+Completed: [ ]
+
+Users should be able to create a private room where only users with the code (6-digit code) can enter.
+
+Acceptance criteria:
+- [ ] Have a option (radio) to choose between public/private room creation
+- [ ] If you are joining an existing room that is not public show a code input to validate and enter or an error message
+
+## Task 13 - Room name parsing
+
+Priority: Medium
+Completed: [ ]
+
+Rooms should have now a display name like "CS Study group" and a "parsed name" that is used by the backend and be parsed easily from the URL, so if a user type "CS study group" turns into
+"cs-study-group-<hash>". THe parsed name should strip special characters and only accept numbers and chars from the display name.
+
+Acceptance criteria:
+
+- [ ] Backend should have a more easily readable room name for using on internal services than the display name.
+
+## Task 14 - Change/switch rooms
+
+Priority: Low
+Completed: [ ]
+
+Similar to Discord we want users to be able to change between rooms on a click.
+They don't need to get all of the message history at once.
+
+## Task 15 - User profile
+
+Priority: Low
+Completed: [ ]
+
+Be able to change name.
+Save on the SQL store (postgres)
+
+## Task 16 - Nodejs Open telemetry
+
+Priority: Low
+Completed: [ ]
+
+Grafana
+

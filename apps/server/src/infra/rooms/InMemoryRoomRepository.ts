@@ -1,4 +1,5 @@
 import type { ChatUser } from '../../domain/ChatUser.ts';
+import type { RoomConfig, RoomConfigLookup } from '../../domain/Room.ts';
 import type { RoomRepository } from './RoomRepository.ts';
 
 const membershipKey = (room: string, username: string): string =>
@@ -9,6 +10,7 @@ export class InMemoryRoomRepository implements RoomRepository {
   // Resolves a live socketId back to its membership key for
   // markUserOffline, since disconnect only gives us the socketId.
   private readonly keyBySocketId: Map<string, string> = new Map();
+  private readonly configByRoom: Map<string, RoomConfig> = new Map();
 
   async addUser(user: ChatUser): Promise<boolean> {
     const key = membershipKey(user.room, user.username);
@@ -42,5 +44,13 @@ export class InMemoryRoomRepository implements RoomRepository {
 
   async getUsersInRoom(room: string): Promise<ChatUser[]> {
     return [...this.membersByKey.values()].filter((user) => user.room === room);
+  }
+
+  async getOrCreateRoomConfig(config: RoomConfig): Promise<RoomConfigLookup> {
+    const existing = this.configByRoom.get(config.room);
+    if (existing) return { config: existing, created: false };
+
+    this.configByRoom.set(config.room, config);
+    return { config, created: true };
   }
 }

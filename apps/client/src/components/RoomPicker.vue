@@ -10,6 +10,27 @@
           placeholder="e.g Math, Travel, Academy, ..."
           required
         />
+        <fieldset class="visibility">
+          <legend>If this room doesn't exist yet, create it as:</legend>
+          <label class="visibility__option">
+            <input
+              type="radio"
+              name="visibility"
+              value="public"
+              v-model="visibility"
+            />
+            Public
+          </label>
+          <label class="visibility__option">
+            <input
+              type="radio"
+              name="visibility"
+              value="private"
+              v-model="visibility"
+            />
+            Private (access code required to join)
+          </label>
+        </fieldset>
         <button type="submit">Join</button>
       </form>
     </div>
@@ -20,10 +41,26 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+type RoomVisibility = 'public' | 'private'
+
 const router = useRouter()
 const room = ref('')
+const visibility = ref<RoomVisibility>('public')
 
 const joinRoom = (): void => {
+  // Visibility only matters the first time this room is created - the
+  // server ignores it for a room that already exists (Task 12), so the
+  // query string is just how the choice reaches Chat.vue's initial join.
+  // Public is the default/common case, so it's left off the URL
+  // entirely rather than always appending `?visibility=public`.
+  if (visibility.value === 'private') {
+    router.push({
+      path: `/chat/${room.value}`,
+      query: { visibility: 'private' },
+    })
+    return
+  }
+
   router.push(`/chat/${room.value}`)
 }
 </script>
@@ -75,6 +112,37 @@ const joinRoom = (): void => {
 
 .centered-form button:hover {
   background: var(--light-purple);
+}
+
+.visibility {
+  border: none;
+  padding: 0;
+  margin-block-end: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.visibility legend {
+  padding: 0;
+  margin-block-end: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--gray);
+}
+
+.visibility__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-end: 0;
+  font-weight: 400;
+  color: var(--white);
+}
+
+.centered-form .visibility__option input[type='radio'] {
+  inline-size: auto;
+  margin-block-end: 0;
+  accent-color: var(--purple);
 }
 
 .puff-in-center {

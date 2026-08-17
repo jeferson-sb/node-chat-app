@@ -1,5 +1,14 @@
 <template>
-  <main class="chat">
+  <section v-if="showCodeGate" class="centered-form">
+    <div class="centered-form__box puff-in-center">
+      <RoomCodeGate
+        :room="room"
+        :error="codeError"
+        @submit="handleCodeSubmit"
+      />
+    </div>
+  </section>
+  <main v-else class="chat">
     <header>
       <nav>
         <h4>ChatMe</h4>
@@ -27,6 +36,9 @@
       <h2 class="room-title">
         {{ room }}
       </h2>
+      <p v-if="accessCode" class="room-access-code">
+        Access code: <strong>{{ accessCode }}</strong>
+      </p>
       <h3 class="list-title">Users</h3>
       <ul class="users">
         <li
@@ -88,13 +100,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { io, type Socket } from 'socket.io-client'
 import notify from '../services/notify'
 import { authClient } from '../services/auth'
 import { useAutoScroll } from '../composables/useAutoScroll'
 import LogoutButton from './LogoutButton.vue'
+import RoomCodeGate from './RoomCodeGate.vue'
 
 type ChatUser = {
   username: string
@@ -114,6 +127,29 @@ type RoomData = {
   room: string
   users: ChatUser[]
 }
+
+type RoomVisibility = 'public' | 'private'
+
+type JoinPayload = {
+  room: string
+  visibility?: RoomVisibility
+  code?: string
+}
+
+type SocketErrorPayload = {
+  code: string
+  message: string
+}
+
+type PrivateRoomCodePayload = {
+  room: string
+  code: string
+}
+
+/** Only this domain error is relevant to the pre-chat code gate below - any
+ * other `error` event (e.g. a rejected `sendMessage`) is left for a future
+ * change, same as today (docs/adr/2026-08-14-logging-and-domain-errors.md). */
+const INVALID_ROOM_CODE = 'INVALID_ROOM_CODE'
 
 defineOptions({
   name: 'Chat',
@@ -136,9 +172,40 @@ const isActive = ref(false)
 const messageInput = ref<HTMLTextAreaElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 
+// Only meaningful the first time this room is ever joined - the server
+// ignores it for a room that already exists (Task 12). Set via
+// RoomPicker's radio and carried over as a query param (router.ts has no
+// dedicated "create room" route, so this is the only channel for it).
+const requestedVisibility: RoomVisibility =
+  route.query?.visibility === 'private' ? 'private' : 'public'
+
+// Gates the chat UI behind a code prompt when the room turns out to be
+// private and no/an invalid code was supplied - see the `error` handler
+// below. `joined` flips true once the server actually lets this socket
+// in (signaled by the `history` snapshot every successful join emits).
+const codeRequired = ref(false)
+const codeError = ref<string | null>(null)
+const joined = ref(false)
+const showCodeGate = computed(() => codeRequired.value && !joined.value)
+// Only ever set for a private room, and only to this socket - see
+// eventTypes.ts's privateRoomCode doc comment on the server.
+const accessCode = ref<string | null>(null)
+
 useAutoScroll(messagesContainer, messages, { smooth: true })
 
 let socket: Socket
+
+const attemptJoin = (code?: string): void => {
+  const payload: JoinPayload = { room: room.value }
+  if (requestedVisibility === 'private') payload.visibility = 'private'
+  if (code) payload.code = code
+  socket.emit('join', payload)
+}
+
+const handleCodeSubmit = (code: string): void => {
+  codeError.value = null
+  attemptJoin(code)
+}
 
 onMounted(async () => {
   const { data } = await authClient.getSession()
@@ -158,10 +225,14 @@ onMounted(async () => {
     withCredentials: true,
   })
 
-  socket.emit('join', { room: room.value })
+  attemptJoin()
 
   socket.on('history', (history: ChatMessage[]) => {
     messages.value = history
+    // The server only ever emits `history` right after a successful join
+    // (SocketController.onJoinRoom) - there's no separate "joined" ack,
+    // so this is the signal that dismisses the code gate, if it was up.
+    joined.value = true
   })
 
   socket.on('message', (msg: ChatMessage) => {
@@ -173,6 +244,16 @@ onMounted(async () => {
 
   socket.on('roomData', (data: RoomData) => {
     users.value = data.users
+  })
+
+  socket.on('privateRoomCode', ({ code }: PrivateRoomCodePayload) => {
+    accessCode.value = code
+  })
+
+  socket.on('error', (err: SocketErrorPayload) => {
+    if (err.code !== INVALID_ROOM_CODE) return
+    codeRequired.value = true
+    codeError.value = err.message
   })
 })
 
@@ -359,6 +440,18 @@ header {
   padding: 12px 24px 0 24px;
 }
 
+.room-access-code {
+  color: var(--gray);
+  font-size: 0.875rem;
+  padding-inline: 24px;
+  margin-block: 0.75rem;
+}
+
+.room-access-code strong {
+  color: var(--white);
+  letter-spacing: 1px;
+}
+
 .users {
   list-style-type: none;
   font-weight: 300;
@@ -492,6 +585,81 @@ header {
 
   .compose form {
     margin-right: 0;
+  }
+}
+
+/* Code gate (RoomCodeGate.vue), shown instead of .chat while a private
+   room's access code hasn't been validated yet - shell styling lives
+   here rather than in the child component, same split as AuthPage.vue
+   owns its own LoginForm/SignupForm's shell. */
+.centered-form {
+  background-color: var(--bg-color);
+  background-image: url('../assets/bg-illustration.svg');
+  background-position: center;
+  background-size: cover;
+  block-size: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.centered-form__box {
+  border-radius: 5px;
+  background: var(--dark-2);
+  padding: 40px;
+  width: 420px;
+  font-size: 18px;
+  box-shadow: 0 2px 10px 0 rgba(0, 0, 0, 0.2);
+}
+
+.centered-form :deep(input) {
+  margin-block-end: 1rem;
+  inline-size: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 3px;
+  border: 1px solid #0000004d;
+  background-color: #0000004d;
+  color: var(--white);
+}
+
+.centered-form :deep(input:focus) {
+  border-color: var(--purple);
+}
+
+.centered-form :deep(button[type='submit']) {
+  background: var(--purple);
+  font-weight: 600;
+  letter-spacing: 1.1px;
+  line-height: 16px;
+  min-height: 40px;
+  inline-size: 100%;
+}
+
+.centered-form :deep(button[type='submit']:hover) {
+  background: var(--light-purple);
+}
+
+.centered-form :deep(.room-code-gate__error) {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-block-start: -8px;
+  margin-block-end: 1rem;
+}
+
+.puff-in-center {
+  animation: puff-in-center 0.7s cubic-bezier(0.47, 0, 0.745, 0.715) both;
+}
+@keyframes puff-in-center {
+  0% {
+    transform: scale(2);
+    filter: blur(2px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    filter: blur(0px);
+    opacity: 1;
   }
 }
 </style>

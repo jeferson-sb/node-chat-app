@@ -3,9 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { ChatUser } from '../../domain/ChatUser.ts';
 import { Message, type MessageSnapshot } from '../../domain/Message.ts';
+import { generateRoomCode, type RoomVisibility } from '../../domain/Room.ts';
 import { mergeHistory } from './mergeHistory.ts';
 import { ValidationError } from '../../domain/errors/ValidationError.ts';
 import { RoomNotFoundError } from '../../domain/errors/RoomNotFoundError.ts';
+import { InvalidRoomCodeError } from '../../domain/errors/InvalidRoomCodeError.ts';
 import { eventTypes } from '../../utils/eventTypes.ts';
 import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
@@ -18,6 +20,20 @@ export type { ChatUser };
 
 export type JoinRoomPayload = {
   room: string;
+  /**
+   * Client's requested visibility for a room that doesn't exist yet.
+   * Only takes effect on the room's first-ever join - see
+   * RoomRepository.getOrCreateRoomConfig. Defaults to `'public'`, so
+   * omitting this field preserves today's implicit-creation behavior.
+   */
+  visibility?: RoomVisibility;
+  /** Access code for an existing private room. Ignored for public rooms. */
+  code?: string;
+};
+
+export type PrivateRoomCodePayload = {
+  room: string;
+  code: string;
 };
 
 export type SendMessagePayload = {
@@ -56,9 +72,51 @@ export default class SocketController {
     this.readCursors = readCursors;
   }
 
-  async onJoinRoom(socket: Socket, { room }: JoinRoomPayload): Promise<void> {
+  async onJoinRoom(
+    socket: Socket,
+    { room, visibility = 'public', code }: JoinRoomPayload,
+  ): Promise<void> {
     if (!room) {
       throw new ValidationError('Room is required');
+    }
+
+    // Claims this room's visibility if nobody has yet; a room that
+    // already exists ignores the requested visibility and returns its
+    // real config instead (docs/adr/2026-08-16-private-rooms.md). The
+    // code is generated even when it might go unused (the room may
+    // already exist) - same "generate first, discard if unused" shape as
+    // uuidv4() below for message ids.
+    const { config: roomConfig, created } =
+      await this.rooms.getOrCreateRoomConfig({
+        room,
+        visibility,
+        code: visibility === 'private' ? generateRoomCode() : undefined,
+      });
+
+    // A brand-new private room has no code for its creator to have
+    // supplied yet - only a later joiner against an already-existing
+    // room is held to the code check.
+    if (
+      !created &&
+      roomConfig.visibility === 'private' &&
+      roomConfig.code !== code
+    ) {
+      throw new InvalidRoomCodeError(
+        code
+          ? `Invalid access code for room "${room}"`
+          : `Room "${room}" requires an access code`,
+      );
+    }
+
+    if (roomConfig.visibility === 'private' && roomConfig.code) {
+      // Sent only to this socket, never broadcast: harmless to echo the
+      // code back to a joiner who supplied it correctly (they already
+      // know it), and it's how a room's creator learns the code to share
+      // in the first place - there's no other channel to deliver it on.
+      socket.emit(eventTypes.privateRoomCode, {
+        room,
+        code: roomConfig.code,
+      } satisfies PrivateRoomCodePayload);
     }
 
     // No "username already in use" check here: the username now comes

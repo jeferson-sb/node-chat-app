@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from './ValidationError.ts';
 import { RoomNotFoundError } from './RoomNotFoundError.ts';
+import { InvalidRoomCodeError } from './InvalidRoomCodeError.ts';
 
 describe('ValidationError', () => {
   it('carries a stable code alongside the human-readable message', () => {
@@ -27,5 +28,21 @@ describe('RoomNotFoundError', () => {
 
   it('is an instance of Error', () => {
     expect(new RoomNotFoundError('missing')).toBeInstanceOf(Error);
+  });
+});
+
+describe('InvalidRoomCodeError', () => {
+  it('carries a stable code alongside the human-readable message', () => {
+    const error = new InvalidRoomCodeError(
+      'Room "secret" requires an access code',
+    );
+
+    expect(error.message).toBe('Room "secret" requires an access code');
+    expect(error.code).toBe('INVALID_ROOM_CODE');
+    expect(error.name).toBe('InvalidRoomCodeError');
+  });
+
+  it('is an instance of Error', () => {
+    expect(new InvalidRoomCodeError('bad code')).toBeInstanceOf(Error);
   });
 });

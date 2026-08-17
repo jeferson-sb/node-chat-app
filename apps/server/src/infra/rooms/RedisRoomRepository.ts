@@ -1,9 +1,11 @@
 import type { Redis } from 'ioredis';
 import type { ChatUser } from '../../domain/ChatUser.ts';
+import type { RoomConfig, RoomConfigLookup } from '../../domain/Room.ts';
 import type { RoomRepository } from './RoomRepository.ts';
 
 const MEMBERS_KEY = 'chatme:members';
 const SOCKET_INDEX_KEY = 'chatme:socket-index';
+const ROOM_CONFIG_KEY = 'chatme:room-config';
 
 const membershipKey = (room: string, username: string): string =>
   `${room}:${username}`;
@@ -18,6 +20,15 @@ const membershipKey = (room: string, username: string): string =>
  * fine at this app's scale, see docs/adr/2026-08-09-horizontal-scaling.md.
  * See docs/adr/2026-08-12-presence-indicators.md for why membership is
  * keyed by (room, username) rather than socketId.
+ *
+ * A third hash (chatme:room-config: room -> RoomConfig JSON) holds each
+ * room's visibility/access code, set once via HSETNX so concurrent first
+ * joiners across nodes agree on a single winner instead of one
+ * overwriting another's choice (docs/adr/2026-08-16-private-rooms.md).
+ * Manually verified against a running Redis instance rather than covered
+ * by an automated test, same precedent as this class's other methods
+ * (see docs/adr/2026-08-09-horizontal-scaling.md and
+ * RedisReadCursorRepository).
  */
 export class RedisRoomRepository implements RoomRepository {
   private readonly redis: Redis;
@@ -64,5 +75,20 @@ export class RedisRoomRepository implements RoomRepository {
   private async getAllMembers(): Promise<ChatUser[]> {
     const entries = await this.redis.hgetall(MEMBERS_KEY);
     return Object.values(entries).map((raw) => JSON.parse(raw) as ChatUser);
+  }
+
+  async getOrCreateRoomConfig(config: RoomConfig): Promise<RoomConfigLookup> {
+    const wasSet = await this.redis.hsetnx(
+      ROOM_CONFIG_KEY,
+      config.room,
+      JSON.stringify(config),
+    );
+    if (wasSet === 1) return { config, created: true };
+
+    // wasSet === 0 means the field already existed, so this hget can't
+    // come back empty - a different join (this node or another) won the
+    // race and its config is what every joiner must agree on.
+    const raw = await this.redis.hget(ROOM_CONFIG_KEY, config.room);
+    return { config: JSON.parse(raw as string) as RoomConfig, created: false };
   }
 }

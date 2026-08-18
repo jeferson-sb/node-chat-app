@@ -1,0 +1,70 @@
+# @chatme/server - the stateless, horizontally scaled chat tier.
+#
+# Deploy from the repo root (the Docker build context is the monorepo):
+#   fly deploy . --config infra/fly/server/fly.toml --dockerfile Dockerfile
+#
+# Everything stateful lives in its own app on the same 6PN private
+# network (see ../postgres, ../redis, ../scylla) and is addressed over
+# *.internal DNS, so no backing store is ever publicly reachable.
+
+app = "chatme"
+primary_region = "gru"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+
+  # Redis: room roster, socket.io cross-node adapter, history write queue.
+  REDIS_URL = "redis://chatme-redis.internal:6379"
+
+  # A single .internal hostname resolves to an AAAA record per Scylla
+  # machine; the driver then discovers the rest of the ring from peers.
+  SCYLLA_CONTACT_POINTS = "chatme-scylla.internal"
+  # Must match the datacenter the Scylla nodes report, which
+  # ../scylla/entrypoint.sh sets to $FLY_REGION.
+  SCYLLA_LOCAL_DATACENTER = "gru"
+
+  BETTER_AUTH_URL = "https://chatme.fly.dev"
+  CLIENT_APP_URL = "https://chatme-app.netlify.app"
+  LOG_LEVEL = "info"
+
+# Secrets (set by ../provision.sh, never committed):
+#   BETTER_AUTH_SECRET, DATABASE_URL
+
+# Fly Proxy replaces the nginx load balancer used by docker-compose.yml:
+# it terminates TLS, upgrades websockets, and fans out across machines.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Websockets are long-lived: a stopped machine is a dropped
+  # conversation, so the chat tier stays warm rather than scale-to-zero.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 3
+  processes = ["app"]
+
+  # Socket.IO is websocket-only here (no long-polling fallback), so
+  # balancing on open connections tracks real load better than requests.
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 200
+    hard_limit = 250
+
+# The server exposes no HTTP health route yet, so readiness is a TCP
+# check on the listener. Swap to an http check once /health exists.
+[checks]
+  [checks.listener]
+    type = "tcp"
+    port = 8080
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

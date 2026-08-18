@@ -71,6 +71,42 @@ rejected — lives in the ADRs:
 See [`docs/TASK_TRACKER.md`](docs/TASK_TRACKER.md) for what's implemented
 versus still open.
 
+## ⚖️ Trade-offs
+
+- **Redis/Scylla are optional, not required** — without `REDIS_URL`/
+  `SCYLLA_CONTACT_POINTS` the app falls back to single-process in-memory
+  storage, so it runs standalone but loses horizontal scaling and durable
+  history.
+- **Postgres for accounts has no fallback** — a missing `DATABASE_URL`
+  fails loudly at startup rather than silently disabling auth.
+- **Messages broadcast before they're persisted** — real-time delivery
+  never waits on storage, at the cost of a message briefly being live
+  before it's guaranteed durable.
+- **Bounded, dead-lettering write queue** — a bad message dead-letters
+  instead of stalling every other write, but a long outage can trim older
+  pending entries.
+- **Room membership and read-cursors are never deleted** — enables
+  accurate presence and missed-message delivery, but both stores grow
+  unboundedly over time.
+- **One active room per user, not true multi-room presence** — keeps
+  switching rooms simple, but rules out being in two rooms at once
+  without a bigger rework.
+- **Room identity is a hash of its display name, not a persisted
+  directory** — no lookup table needed, but a slug can't be reversed back
+  to its display name, and this discarded all pre-slug data with no
+  migration.
+- **Private room codes are never persisted** — revisiting a private room
+  from the switch list always re-prompts for its code.
+- **Websocket-only, no long-polling fallback** — simpler load balancing
+  with no sticky sessions, but no support for networks that block
+  websockets.
+- **Manual composition root, no DI container** — easy to read at today's
+  size, but won't auto-scale if service wiring gets much more
+  conditional.
+- **Redis/Scylla-backed repositories are verified manually, not by
+  automated tests** — keeps the test suite fast, but real-backend
+  regressions can slip past CI.
+
 ## 🚀 Quick Start
 
 > [!NOTE]
@@ -112,6 +148,7 @@ docker compose up --build
 
 # one-time, once the stack is healthy (idempotent to re-run):
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/chatme pnpm --filter @chatme/server run db:migrate:auth
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/chatme pnpm --filter @chatme/server run db:migrate:user-rooms
 SCYLLA_CONTACT_POINTS=localhost pnpm --filter @chatme/server run db:migrate:scylla
 
 # in another terminal:

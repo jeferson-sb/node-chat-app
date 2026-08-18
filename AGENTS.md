@@ -47,6 +47,7 @@ TBD
 
 - Functions should be self-explanatory and not require many comments to being with. But when necessary, use JSDoc style comments for functions, especially if they are part of a public API or have complex logic.
 - Avoid vague or redundant comments that only explain what the code is doing without providing additional context or reasoning. Instead, focus on explaining why certain decisions were made or any non-obvious behavior.
+- Favor use state machines rather than boolean flags for complex states either in UI, Backend, CLI, etc.
 
 ## Architecture
 

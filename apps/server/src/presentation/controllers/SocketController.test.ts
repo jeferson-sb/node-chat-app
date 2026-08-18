@@ -48,6 +48,7 @@ const createMockSocket = (
     id,
     data: { user: { id: `user-${id}`, name: username } },
     join: vi.fn(),
+    leave: vi.fn(),
     emit: vi.fn(),
     to: vi.fn(() => roomEmitter),
   } as unknown as Socket & { id: string };
@@ -80,22 +81,61 @@ const createFakeReadCursors = () => {
   };
 };
 
+/**
+ * Map-backed fake, not a shared production class - UserRoomsRepository is
+ * Postgres-only in production (PostgresUserRoomsRepository, verified
+ * against pglite in its own test), same precedent as
+ * createFakeReadCursors above.
+ */
+const createFakeUserRooms = () => {
+  const byUser = new Map<
+    string,
+    { room: string; displayName: string; lastJoinedAt: number }[]
+  >();
+  return {
+    recordJoin: vi.fn(
+      async ({
+        userId,
+        room,
+        displayName,
+        joinedAt,
+      }: {
+        userId: string;
+        room: string;
+        displayName: string;
+        joinedAt: number;
+      }) => {
+        const rooms = byUser.get(userId) ?? [];
+        const withoutRoom = rooms.filter((entry) => entry.room !== room);
+        byUser.set(userId, [
+          { room, displayName, lastJoinedAt: joinedAt },
+          ...withoutRoom,
+        ]);
+      },
+    ),
+    listJoinedRooms: vi.fn(async (userId: string) => byUser.get(userId) ?? []),
+  };
+};
+
 describe('SocketController', () => {
   let socketServer: Server;
   let messageHistory: InMemoryMessageHistoryRepository;
   let readCursors: ReturnType<typeof createFakeReadCursors>;
+  let userRooms: ReturnType<typeof createFakeUserRooms>;
   let controller: SocketController;
 
   beforeEach(() => {
     socketServer = createMockServer();
     messageHistory = new InMemoryMessageHistoryRepository();
     readCursors = createFakeReadCursors();
+    userRooms = createFakeUserRooms();
     controller = new SocketController({
       socketServer,
       rooms: new InMemoryRoomRepository(),
       messageHistory,
       messageQueue: new InMemoryMessageQueue(messageHistory),
       readCursors,
+      userRooms,
     });
   });
 
@@ -258,6 +298,66 @@ describe('SocketController', () => {
     });
   });
 
+  describe('joined-room history', () => {
+    it('records the join and emits the updated room list to the joining socket', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      expect(userRooms.recordJoin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-socket-1',
+          room: GENERAL,
+          displayName: 'general',
+        }),
+      );
+      expect(socket.emit).toHaveBeenCalledWith(eventTypes.joinedRooms, [
+        expect.objectContaining({ room: GENERAL, displayName: 'general' }),
+      ]);
+    });
+  });
+
+  describe('concurrent sessions for the same account', () => {
+    it('sends to the room this specific socket joined, not another still-online session in a different room', async () => {
+      const firstTab = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(firstTab, { room: 'general' });
+
+      // A second, unrelated socket for the same account - e.g. a second
+      // browser tab opened directly on another room's URL, never going
+      // through the same socket's leaveCurrentRoom cleanup.
+      const secondTab = createMockSocket('socket-2', 'alice');
+      await controller.onJoinRoom(secondTab, { room: 'random' });
+
+      vi.mocked(socketServer.to).mockClear();
+      await controller.onSendMessage(secondTab, { message: 'hi from random' });
+
+      expect(socketServer.to).toHaveBeenCalledWith(RANDOM);
+      expect(socketServer.to).not.toHaveBeenCalledWith(GENERAL);
+    });
+  });
+
+  describe('switching rooms', () => {
+    it('leaves the previous room when the same socket joins a different one', async () => {
+      const socket = createMockSocket('socket-1', 'alice');
+      await controller.onJoinRoom(socket, { room: 'general' });
+
+      await controller.onJoinRoom(socket, { room: 'random' });
+
+      expect(socket.leave).toHaveBeenCalledWith(GENERAL);
+      expect(await controller.getUsersOnRoom(GENERAL)).toEqual([
+        {
+          username: 'alice',
+          room: GENERAL,
+          socketId: 'socket-1',
+          online: false,
+        },
+      ]);
+      expect(await controller.getUsersOnRoom(RANDOM)).toEqual([
+        { username: 'alice', room: RANDOM, socketId: 'socket-1', online: true },
+      ]);
+    });
+  });
+
   describe('private rooms', () => {
     it('creates a private room and emits its generated code to the creator', async () => {
       const socket = createMockSocket('socket-1', 'alice');
@@ -411,6 +511,7 @@ describe('SocketController', () => {
           enqueue: vi.fn().mockRejectedValue(new Error('queue unavailable')),
         },
         readCursors: createFakeReadCursors(),
+        userRooms: createFakeUserRooms(),
       });
       const socket = createMockSocket('socket-1', 'alice');
       await failingController.onJoinRoom(socket, { room: 'general' });

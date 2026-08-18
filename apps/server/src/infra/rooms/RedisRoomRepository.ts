@@ -14,10 +14,11 @@ const membershipKey = (room: string, username: string): string =>
  * Redis-backed room roster, shared by every server node behind a load
  * balancer (see setupSocketServer and docker-compose.yml). Keeps a hash
  * of "room:username" -> ChatUser JSON (membership, survives disconnects)
- * plus a second hash of socketId -> "room:username" purely to resolve
- * markUserOffline, since a disconnect only hands us the socketId. Same
- * O(n) hgetall scans in findUserByUsername/getUsersInRoom as before -
- * fine at this app's scale, see docs/adr/2026-08-09-horizontal-scaling.md.
+ * plus a second hash of socketId -> "room:username", resolving
+ * markUserOffline/findUserBySocketId in O(1) since a disconnect or a sent
+ * message only ever hands us the socketId. getUsersInRoom still does an
+ * O(n) hgetall scan - fine at this app's scale, see
+ * docs/adr/2026-08-09-horizontal-scaling.md.
  * See docs/adr/2026-08-12-presence-indicators.md for why membership is
  * keyed by (room, username) rather than socketId.
  *
@@ -62,9 +63,12 @@ export class RedisRoomRepository implements RoomRepository {
     return offlineMember;
   }
 
-  async findUserByUsername(username: string): Promise<ChatUser | undefined> {
-    const users = await this.getAllMembers();
-    return users.find((user) => user.username === username && user.online);
+  async findUserBySocketId(socketId: string): Promise<ChatUser | undefined> {
+    const key = await this.redis.hget(SOCKET_INDEX_KEY, socketId);
+    if (!key) return undefined;
+
+    const raw = await this.redis.hget(MEMBERS_KEY, key);
+    return raw ? (JSON.parse(raw) as ChatUser) : undefined;
   }
 
   async getUsersInRoom(room: string): Promise<ChatUser[]> {

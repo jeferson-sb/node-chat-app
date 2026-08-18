@@ -17,13 +17,28 @@ const { InMemoryMessageHistoryRepository } =
 const { InMemoryMessageQueue } =
   await import('./infra/queue/InMemoryMessageQueue.ts');
 
+/**
+ * Map-backed fake, not a shared production class - see
+ * SocketController.test.ts's createFakeUserRooms for the same
+ * reasoning. Only bootstrap()'s own wiring is under test here, not
+ * UserRoomsRepository's behavior (covered by
+ * PostgresUserRoomsRepository.test.ts).
+ */
+const fakeUserRooms = {
+  recordJoin: async () => {},
+  listJoinedRooms: async () => [],
+};
+
 describe('bootstrap', () => {
   it('falls back to in-memory services when no external stores are configured', () => {
     configMock.redisUrl = undefined;
     configMock.databaseUrl = undefined;
     configMock.scyllaContactPoints = undefined;
 
-    const services = bootstrap({ authDatabase: {} as never });
+    const services = bootstrap({
+      authDatabase: {} as never,
+      userRooms: fakeUserRooms,
+    });
 
     expect(services.rooms).toBeInstanceOf(InMemoryRoomRepository);
     expect(services.messageHistory).toBeInstanceOf(
@@ -52,12 +67,14 @@ describe('bootstrap', () => {
       messageHistory,
       messageQueue,
       authDatabase,
+      userRooms: fakeUserRooms,
     });
 
     expect(services.rooms).toBe(rooms);
     expect(services.messageHistory).toBe(messageHistory);
     expect(services.messageQueue).toBe(messageQueue);
     expect(services.database).toBe(authDatabase);
+    expect(services.userRooms).toBe(fakeUserRooms);
 
     // Overridden services' lifecycle belongs to the caller - close() must
     // not touch them (nothing to assert against directly here since

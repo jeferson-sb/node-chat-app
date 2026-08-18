@@ -36,10 +36,9 @@ export class InMemoryRoomRepository implements RoomRepository {
     return offlineMember;
   }
 
-  async findUserByUsername(username: string): Promise<ChatUser | undefined> {
-    return [...this.membersByKey.values()].find(
-      (user) => user.username === username && user.online,
-    );
+  async findUserBySocketId(socketId: string): Promise<ChatUser | undefined> {
+    const key = this.keyBySocketId.get(socketId);
+    return key ? this.membersByKey.get(key) : undefined;
   }
 
   async getUsersInRoom(room: string): Promise<ChatUser[]> {

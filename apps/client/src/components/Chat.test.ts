@@ -161,6 +161,52 @@ describe('Chat', () => {
     expect(items[1]?.text()).toContain('offline')
   })
 
+  it('renders the joined-rooms list and switches rooms on click', async () => {
+    const wrapper = await mountChat()
+
+    socketHandlers.get('joinedRooms')?.([
+      { room: 'general-abc123', displayName: 'general', lastJoinedAt: 2 },
+      { room: 'random-def456', displayName: 'random', lastJoinedAt: 1 },
+    ])
+    await wrapper.vm.$nextTick()
+
+    const items = wrapper.findAll('.chat__sidebar .rooms li')
+    expect(items).toHaveLength(2)
+    expect(items[0]?.text()).toContain('general')
+    expect(items[1]?.text()).toContain('random')
+
+    emitMock.mockClear()
+    await items[1]?.find('button').trigger('click')
+
+    expect(emitMock).toHaveBeenCalledWith('join', { room: 'random' })
+  })
+
+  it('clears messages and users from the previous room when switching', async () => {
+    const wrapper = await mountChat()
+    socketHandlers.get('history')?.([
+      { id: '1', username: 'alice', text: 'old room message', createdAt: 1 },
+    ])
+    socketHandlers.get('roomData')?.({
+      room: 'general',
+      users: [
+        { username: 'alice', room: 'general', socketId: 's1', online: true },
+      ],
+    })
+    socketHandlers.get('joinedRooms')?.([
+      { room: 'general-abc123', displayName: 'general', lastJoinedAt: 2 },
+      { room: 'random-def456', displayName: 'random', lastJoinedAt: 1 },
+    ])
+    await wrapper.vm.$nextTick()
+
+    await wrapper
+      .findAll('.chat__sidebar .rooms li button')[1]
+      ?.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('#messages .message')).toHaveLength(0)
+    expect(wrapper.findAll('.chat__sidebar .users li')).toHaveLength(0)
+  })
+
   it('sends a message and clears the input', async () => {
     const wrapper = await mountChat()
 

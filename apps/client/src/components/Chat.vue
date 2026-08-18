@@ -39,6 +39,18 @@
       <p v-if="accessCode" class="room-access-code">
         Access code: <strong>{{ accessCode }}</strong>
       </p>
+      <h3 class="list-title">Rooms</h3>
+      <ul class="rooms">
+        <li v-for="joinedRoom in joinedRooms" :key="joinedRoom.room">
+          <button
+            type="button"
+            :class="{ 'room-item--active': joinedRoom.room === activeRoomSlug }"
+            @click="switchRoom(joinedRoom.displayName)"
+          >
+            {{ joinedRoom.displayName }}
+          </button>
+        </li>
+      </ul>
       <h3 class="list-title">Users</h3>
       <ul class="users">
         <li
@@ -146,6 +158,12 @@ type PrivateRoomCodePayload = {
   code: string
 }
 
+type JoinedRoom = {
+  room: string
+  displayName: string
+  lastJoinedAt: number
+}
+
 // Other `error` events (e.g. a rejected `sendMessage`) aren't handled here.
 const INVALID_ROOM_CODE = 'INVALID_ROOM_CODE'
 
@@ -178,6 +196,12 @@ const joined = ref(false)
 const showCodeGate = computed(() => codeRequired.value && !joined.value)
 // Only ever sent to the socket that created/joined a private room.
 const accessCode = ref<string | null>(null)
+const joinedRooms = ref<JoinedRoom[]>([])
+// The slug of whichever room this socket is currently a member of - only
+// known via roomData's `room` field (the client never computes a slug
+// itself, docs/adr/2026-08-16-room-name-slugs.md), used purely to
+// highlight the active entry in the rooms list below.
+const activeRoomSlug = ref('')
 
 useAutoScroll(messagesContainer, messages, { smooth: true })
 
@@ -193,6 +217,19 @@ const attemptJoin = (code?: string): void => {
 const handleCodeSubmit = (code: string): void => {
   codeError.value = null
   attemptJoin(code)
+}
+
+const switchRoom = (displayName: string): void => {
+  if (displayName === room.value) return
+
+  room.value = displayName
+  messages.value = []
+  users.value = []
+  accessCode.value = null
+  codeRequired.value = false
+  codeError.value = null
+  joined.value = false
+  attemptJoin()
 }
 
 onMounted(async () => {
@@ -225,6 +262,11 @@ onMounted(async () => {
 
   socket.on('roomData', (data: RoomData) => {
     users.value = data.users
+    activeRoomSlug.value = data.room
+  })
+
+  socket.on('joinedRooms', (rooms: JoinedRoom[]) => {
+    joinedRooms.value = rooms
   })
 
   socket.on('privateRoomCode', ({ code }: PrivateRoomCodePayload) => {
@@ -448,6 +490,32 @@ header {
 .room-access-code strong {
   color: var(--white);
   letter-spacing: 1px;
+}
+
+.rooms {
+  list-style-type: none;
+  padding-inline-start: 0;
+  margin-block-end: 0;
+
+  & button {
+    inline-size: 100%;
+    text-align: start;
+    padding-block: 0.75rem;
+    padding-inline: 1.5625rem 0.75rem;
+    background-color: var(--dark);
+    color: var(--white);
+    font-weight: 300;
+    border-radius: 0;
+
+    &:hover {
+      background-color: var(--dark-2);
+    }
+
+    &.room-item--active {
+      color: var(--purple);
+      font-weight: 600;
+    }
+  }
 }
 
 .users {

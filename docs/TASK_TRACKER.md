@@ -151,21 +151,14 @@ code (6-digit code) can enter.
 Priority: High
 Completed: [x] Visibility (`public`/`private`) and a server-generated
 6-digit access code are decided on a room's first-ever join and
-persisted alongside the existing room roster (`RoomRepository.
-getOrCreateRoomConfig`, both the in-memory and Redis-backed
-implementations). Code validation happens only in
-`SocketController.onJoinRoom`, via a new `InvalidRoomCodeError` domain
-error surfaced over Socket.io the same way `RoomNotFoundError`/
-`ValidationError` already are. See
+persisted alongside the existing room roster. See
 docs/adr/2026-08-16-private-rooms.md.
 
 Acceptance criteria:
 - [x] Have an option (radio) to choose between public/private room
-      creation - `RoomPicker.vue`.
+      creation.
 - [x] If you are joining an existing room that is not public, show a
-      code input to validate and enter, or an error message -
-      `RoomCodeGate.vue`, shown by `Chat.vue` when the server rejects a
-      join with `INVALID_ROOM_CODE`.
+      code input to validate and enter, or an error message.
 
 ## Task 13 - Room name parsing
 
@@ -177,9 +170,7 @@ ASCII-only identifier for a room independent of whatever free-text a
 user typed.
 
 Priority: Medium
-Completed: [x] Added `slugifyRoomName`
-(`apps/server/src/domain/slugifyRoomName.ts`) and wired
-`SocketController.onJoinRoom` to slugify the display name a client sends
+Completed: [x] Added `slugifyRoomName` to slugify the display name a client sends
 before using it as the Socket.io room / roster / message-history / read-
 cursor key, everywhere that key was previously the raw display name. See
 docs/adr/2026-08-16-room-name-slugs.md for the hash derivation and the
@@ -193,10 +184,15 @@ Acceptance criteria:
 ## Task 14 - Change/switch rooms
 
 Priority: Low
-Completed: [ ]
+Completed: [x]
 
 Similar to Discord we want users to be able to change between rooms on a click.
 They don't need to get all of the message history at once.
+
+Implemented as a single-active-room switch (leave then join over the same
+socket, no page reload) plus a Postgres-backed per-account room history
+powering a clickable "Rooms" list in the sidebar. See
+docs/adr/2026-08-17-room-switching.md.
 
 ## Task 15 - User profile
 

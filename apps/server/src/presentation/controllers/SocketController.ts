@@ -14,6 +14,7 @@ import type { RoomRepository } from '../../infra/rooms/RoomRepository.ts';
 import type { MessageHistoryRepository } from '../../infra/history/MessageHistoryRepository.ts';
 import type { MessageQueue } from '../../infra/queue/MessageQueue.ts';
 import type { ReadCursorRepository } from '../../infra/cursor/ReadCursorRepository.ts';
+import type { UserRoomsRepository } from '../../infra/userRooms/UserRoomsRepository.ts';
 import { getSocketUser } from '../socketAuth.ts';
 import { logger } from '../../infra/logging/createLogger.ts';
 
@@ -56,6 +57,7 @@ export type SocketControllerDeps = {
   messageHistory: MessageHistoryRepository;
   messageQueue: MessageQueue;
   readCursors: ReadCursorRepository;
+  userRooms: UserRoomsRepository;
 };
 
 /** How many past messages a joining user sees (docs/adr/2026-08-11-chat-history-storage.md). */
@@ -67,6 +69,7 @@ export default class SocketController {
   private readonly messageHistory: MessageHistoryRepository;
   private readonly messageQueue: MessageQueue;
   private readonly readCursors: ReadCursorRepository;
+  private readonly userRooms: UserRoomsRepository;
 
   constructor({
     socketServer,
@@ -74,18 +77,25 @@ export default class SocketController {
     messageHistory,
     messageQueue,
     readCursors,
+    userRooms,
   }: SocketControllerDeps) {
     this.socketServer = socketServer;
     this.rooms = rooms;
     this.messageHistory = messageHistory;
     this.messageQueue = messageQueue;
     this.readCursors = readCursors;
+    this.userRooms = userRooms;
   }
 
   async onJoinRoom(
     socket: Socket,
     { room, visibility = 'public', code }: JoinRoomPayload,
   ): Promise<void> {
+    // A no-op for a socket's first-ever join (nothing tracked yet); for a
+    // room switch (Task 14, docs/adr/2026-08-17-room-switching.md), this
+    // is what vacates the previous room before joining the new one.
+    await this.leaveCurrentRoom(socket);
+
     if (!room || room.trim().length === 0) {
       throw new ValidationError('Room is required');
     }
@@ -141,7 +151,7 @@ export default class SocketController {
     // from a verified account (socketAuth.ts), not client input, so the
     // account itself - not this check - is what makes it unique (see
     // docs/adr/2026-08-09-authentication.md).
-    const { name: username } = getSocketUser(socket);
+    const { id: userId, name: username } = getSocketUser(socket);
     const isFirstJoin = await this.rooms.addUser({
       username,
       room: slug,
@@ -162,6 +172,20 @@ export default class SocketController {
     ]);
     const history = mergeHistory(recent, missed, HISTORY_LIMIT);
     socket.emit(eventTypes.history, history.slice().reverse());
+
+    // Powers the client's room-switch list (Task 14,
+    // docs/adr/2026-08-17-room-switching.md) - the display name, not the
+    // slug, since that's the only form a human recognises.
+    await this.userRooms.recordJoin({
+      userId,
+      room: slug,
+      displayName: room,
+      joinedAt: Date.now(),
+    });
+    socket.emit(
+      eventTypes.joinedRooms,
+      await this.userRooms.listJoinedRooms(userId),
+    );
 
     // Forward only: the recent window reaches back past the cursor, so
     // the newest delivered message may be one already seen.
@@ -205,10 +229,16 @@ export default class SocketController {
     socket: Socket,
     { message }: SendMessagePayload,
   ): Promise<void> {
-    const { name: username } = getSocketUser(socket);
-    const user = await this.rooms.findUserByUsername(username);
+    // Resolved from this exact socket's own membership, not a
+    // username-wide search: the same account can have more than one live
+    // connection at once (a second tab, or one opened straight on
+    // another room's URL), each with its own online membership in a
+    // different room - a username alone can't tell which one this
+    // message came from (docs/adr/2026-08-17-room-switching.md).
+    const user = await this.rooms.findUserBySocketId(socket.id);
 
     if (!user) {
+      const { name: username } = getSocketUser(socket);
       throw new RoomNotFoundError(
         `${username} has no active room membership to send a message to`,
       );
@@ -216,7 +246,7 @@ export default class SocketController {
 
     const msg = Message.from({
       id: uuidv4(),
-      username,
+      username: user.username,
       text: message,
       createdAt: Date.now(),
     });
@@ -232,22 +262,33 @@ export default class SocketController {
   async onDisconnect(socket: Socket): Promise<void> {
     // No "has left" message: a disconnect only flips the sidebar's
     // online indicator now, see docs/adr/2026-08-12-presence-indicators.md.
-    const user = await this.rooms.markUserOffline(socket.id);
-
-    if (user) {
-      // Everything broadcast while connected was already seen live, so
-      // the cursor advances here too (docs/adr/2026-08-14-offline-delivery.md).
-      // A millisecond back: cursors compare strictly, and a message sent
-      // in this same millisecond hasn't been seen.
-      await this.readCursors.markSeen(user.room, user.username, Date.now() - 1);
-
-      this.socketServer.to(user.room).emit(eventTypes.roomData, {
-        room: user.room,
-        users: await this.getUsersOnRoom(user.room),
-      });
-    }
-
+    await this.leaveCurrentRoom(socket);
     logger.info({ socketId: socket.id }, 'socket disconnected');
+  }
+
+  /**
+   * Vacates whichever room this socket currently has an online membership
+   * in, if any - shared by onDisconnect and onJoinRoom's room-switch
+   * behavior (docs/adr/2026-08-17-room-switching.md). `socket.leave` is
+   * redundant but harmless when called from onDisconnect, since a
+   * disconnecting socket already leaves every room automatically.
+   */
+  private async leaveCurrentRoom(socket: Socket): Promise<void> {
+    const user = await this.rooms.markUserOffline(socket.id);
+    if (!user) return;
+
+    socket.leave(user.room);
+
+    // Everything broadcast while connected was already seen live, so
+    // the cursor advances here too (docs/adr/2026-08-14-offline-delivery.md).
+    // A millisecond back: cursors compare strictly, and a message sent
+    // in this same millisecond hasn't been seen.
+    await this.readCursors.markSeen(user.room, user.username, Date.now() - 1);
+
+    this.socketServer.to(user.room).emit(eventTypes.roomData, {
+      room: user.room,
+      users: await this.getUsersOnRoom(user.room),
+    });
   }
 
   onConnectionError(socket: Socket): void {

@@ -24,7 +24,16 @@ describe('auth (integration)', () => {
 
   beforeAll(async () => {
     const authDatabase = await createTestAuthDatabase();
-    app = createApp({ authDatabase });
+    // Never exercised by this file (it only hits Better Auth's own HTTP
+    // endpoints, never `join`), but bootstrap.ts resolves every service
+    // eagerly - authDatabase here is a test-only Kysely Dialect, not a
+    // Pool, so userRooms needs an explicit override regardless (see
+    // bootstrap.ts's resolveUserRooms).
+    const userRooms = {
+      recordJoin: async () => {},
+      listJoinedRooms: async () => [],
+    };
+    app = createApp({ authDatabase, userRooms });
     await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
     const { port } = app.httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;

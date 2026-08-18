@@ -30,8 +30,17 @@ export type RoomRepository = {
    * duplicate/late disconnect event).
    */
   markUserOffline(socketId: string): Promise<ChatUser | undefined>;
-  /** Matches only online members - see the module doc comment. */
-  findUserByUsername(username: string): Promise<ChatUser | undefined>;
+  /**
+   * Finds the membership this exact socket connection joined through -
+   * unlike markUserOffline, a read with no side effect. The only safe way
+   * to answer "what room is this message from": a username alone is
+   * ambiguous the moment the same account has more than one live
+   * connection (two tabs, or a second tab opened straight on another
+   * room's URL) - each keeps its own online membership in a different
+   * room, so matching by username alone could resolve to whichever one
+   * happens to come first (docs/adr/2026-08-17-room-switching.md).
+   */
+  findUserBySocketId(socketId: string): Promise<ChatUser | undefined>;
   getUsersInRoom(room: string): Promise<ChatUser[]>;
   /**
    * Atomically claims a room's visibility/access code the first time

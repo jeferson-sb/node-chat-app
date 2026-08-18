@@ -91,12 +91,6 @@ versus still open.
 - **One active room per user, not true multi-room presence** — keeps
   switching rooms simple, but rules out being in two rooms at once
   without a bigger rework.
-- **Room identity is a hash of its display name, not a persisted
-  directory** — no lookup table needed, but a slug can't be reversed back
-  to its display name, and this discarded all pre-slug data with no
-  migration.
-- **Private room codes are never persisted** — revisiting a private room
-  from the switch list always re-prompts for its code.
 - **Websocket-only, no long-polling fallback** — simpler load balancing
   with no sticky sessions, but no support for networks that block
   websockets.

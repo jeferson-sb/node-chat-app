@@ -51,6 +51,7 @@ export const createApp = (deps: CreateAppDeps = {}): App => {
     messageHistory,
     messageQueue,
     readCursors,
+    userRooms,
     close,
   } = bootstrap(deps);
   const socketServer = setupSocketServer(httpServer, { adapter });
@@ -60,6 +61,7 @@ export const createApp = (deps: CreateAppDeps = {}): App => {
     messageHistory,
     messageQueue,
     readCursors,
+    userRooms,
   });
   const auth = createAuth(database, [config.client]);
   socketServer.use(requireAuthenticatedSocket(auth));

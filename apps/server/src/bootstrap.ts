@@ -22,6 +22,8 @@ import type { MessageQueue } from './infra/queue/MessageQueue.ts';
 import { NullReadCursorRepository } from './infra/cursor/NullReadCursorRepository.ts';
 import { RedisReadCursorRepository } from './infra/cursor/RedisReadCursorRepository.ts';
 import type { ReadCursorRepository } from './infra/cursor/ReadCursorRepository.ts';
+import { PostgresUserRoomsRepository } from './infra/userRooms/PostgresUserRoomsRepository.ts';
+import type { UserRoomsRepository } from './infra/userRooms/UserRoomsRepository.ts';
 import { logger } from './infra/logging/createLogger.ts';
 
 /**
@@ -40,6 +42,7 @@ export type BootstrapDeps = {
   messageHistory?: MessageHistoryRepository;
   messageQueue?: MessageQueue;
   readCursors?: ReadCursorRepository;
+  userRooms?: UserRoomsRepository;
 };
 
 export type Services = {
@@ -48,6 +51,7 @@ export type Services = {
   messageHistory: MessageHistoryRepository;
   messageQueue: MessageQueue;
   readCursors: ReadCursorRepository;
+  userRooms: UserRoomsRepository;
   /**
    * Socket.io adapter for cross-node broadcast, only set when the real
    * Redis-backed rooms service is in use (REDIS_URL configured, no
@@ -231,6 +235,35 @@ const resolveReadCursors = (
 };
 
 /**
+ * Picks the per-account joined-room history store
+ * (docs/adr/2026-08-17-room-switching.md). Deliberately no in-memory
+ * fallback, same reasoning as resolveAuthDatabase: this must survive a
+ * restart and follow the user across devices, so a missing real
+ * connection is a misconfiguration, not something to silently degrade.
+ * Reuses the same Postgres pool already opened for auth rather than a
+ * second connection - only possible when that pool is a real `Pool`
+ * (production; a test-only Kysely `Dialect` can't run raw SQL), which is
+ * why tests exercising this path (e.g. chatFlow.integration.test.ts)
+ * pass their own `userRooms` override instead.
+ */
+const resolveUserRooms = (
+  database: AuthDatabase,
+  override?: UserRoomsRepository,
+): Resolved<UserRoomsRepository> => {
+  if (override) {
+    return { value: override, close: noClose };
+  }
+
+  if (!(database instanceof Pool)) {
+    throw new Error(
+      'userRooms requires a Pool-backed authDatabase, or an explicit userRooms override',
+    );
+  }
+
+  return { value: new PostgresUserRoomsRepository(database), close: noClose };
+};
+
+/**
  * Composition root: resolves every service `createApp.ts` needs, either
  * from the given override (tests) or from its real, config/env-driven
  * default (production/dev). Extracted from createApp.ts so service
@@ -246,6 +279,7 @@ export const bootstrap = (deps: BootstrapDeps = {}): Services => {
     deps.messageQueue,
   );
   const readCursors = resolveReadCursors(deps.readCursors);
+  const userRooms = resolveUserRooms(database.value, deps.userRooms);
 
   const close = async (): Promise<void> => {
     await rooms.close();
@@ -253,6 +287,7 @@ export const bootstrap = (deps: BootstrapDeps = {}): Services => {
     await messageHistory.close();
     await messageQueue.close();
     await readCursors.close();
+    await userRooms.close();
   };
 
   return {
@@ -262,6 +297,7 @@ export const bootstrap = (deps: BootstrapDeps = {}): Services => {
     messageHistory: messageHistory.value,
     messageQueue: messageQueue.value,
     readCursors: readCursors.value,
+    userRooms: userRooms.value,
     close,
   };
 };

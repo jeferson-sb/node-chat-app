@@ -1,11 +1,14 @@
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
+import { PGlite } from '@electric-sql/pglite';
 import { createApp, type App } from './createApp.ts';
 import { createTestAuthDatabase } from '../infra/auth/createTestAuthDatabase.ts';
 import { eventTypes } from '../utils/eventTypes.ts';
 import type { ReadCursorRepository } from '../infra/cursor/ReadCursorRepository.ts';
 import { slugifyRoomName } from '../domain/slugifyRoomName.ts';
+import { PostgresUserRoomsRepository } from '../infra/userRooms/PostgresUserRoomsRepository.ts';
+import { migrateUserRooms } from '../infra/userRooms/migrate.ts';
 
 type ChatMessage = {
   id: string;
@@ -78,7 +81,16 @@ describe('chat flow (integration)', () => {
         cursors.set(`${room}:${username}`, seenAt);
       },
     };
-    app = createApp({ authDatabase, readCursors });
+    // authDatabase here is a test-only Kysely Dialect, not a real Pool,
+    // so it can't back raw SQL queries the way bootstrap.ts's default
+    // resolveUserRooms expects - an explicit override, backed by its own
+    // pglite instance, is required (see resolveUserRooms). Real SQL
+    // against an in-process Postgres, not a Map fake, since `join` is
+    // exercised end-to-end below.
+    const userRoomsDb = new PGlite();
+    await migrateUserRooms(userRoomsDb);
+    const userRooms = new PostgresUserRoomsRepository(userRoomsDb);
+    app = createApp({ authDatabase, readCursors, userRooms });
     await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
     const { port } = app.httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;

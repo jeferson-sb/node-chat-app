@@ -1,0 +1,50 @@
+# ScyllaDB - persisted chat history
+# (docs/adr/2026-08-11-chat-history-storage.md). One 3-node cluster
+# shared by every server replica, not one per replica.
+#
+#   fly deploy infra/fly/scylla --config infra/fly/scylla/fly.toml
+#   fly scale count 3 --app chatme-scylla   # one machine per node
+#
+# Nodes find each other through chatme-scylla.internal, which resolves
+# to an AAAA record per machine in the app; entrypoint.sh turns that
+# into the --seeds list. Scale one node at a time so gossip settles.
+
+app = "chatme-scylla"
+primary_region = "gru"
+kill_signal = "SIGTERM"
+# Draining a node (flush memtables, stop gossip) is slow; killing it
+# early forces a commitlog replay on restart.
+kill_timeout = "300s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Resolved to every node's private IPv6 by entrypoint.sh.
+  SCYLLA_SEED_HOST = "chatme-scylla.internal"
+  # Must fit inside the machine memory below, leaving room for the OS.
+  SCYLLA_MEMORY = "3G"
+  SCYLLA_SMP = "2"
+
+[[mounts]]
+  source = "chatme_scylla_data"
+  destination = "/var/lib/scylla"
+
+[[services]]
+  internal_port = 9042
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 3
+  # CQL stays on the private network; only @chatme/server talks to it.
+  ports = []
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    # A cold node replays its commitlog before it accepts CQL.
+    grace_period = "120s"
+
+[[vm]]
+  size = "performance-2x"
+  memory = "4gb"

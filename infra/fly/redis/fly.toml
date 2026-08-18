@@ -1,0 +1,38 @@
+# Redis - room roster, socket.io cross-node broadcast adapter, and the
+# Streams-backed chat-history write queue
+# (docs/adr/2026-08-11-message-queue-persistence.md).
+#
+#   fly deploy infra/fly/redis --config infra/fly/redis/fly.toml
+#
+# Private-only: the service declares no [[services.ports]], so it is
+# reachable at chatme-redis.internal:6379 over 6PN and nowhere else.
+
+app = "chatme-redis"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Single machine, single volume. The queue is a durable buffer, so its
+# data survives restarts - but this is one node, not a replicated one:
+# see infra/fly/README.md for the POC caveats.
+[[mounts]]
+  source = "chatme_redis_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 6379
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  ports = []
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

@@ -26,6 +26,7 @@ accounts, persisted history, and horizontal scaling.
 
 - [Nginx](https://nginx.org/) — load balancing
 - [Docker Compose](https://docs.docker.com/compose/) — local multi-service stack
+- [Fly.io](https://fly.io/) — deployment IaC (POC, see `infra/fly`)
 - [Vitest](https://vitest.dev/) / [Playwright](https://playwright.dev/) — unit & e2e tests
 - [Turborepo](https://turbo.build/) — monorepo tasks
 
@@ -67,6 +68,7 @@ rejected — lives in the ADRs:
 - [Authentication](docs/adr/2026-08-09-authentication.md)
 - [Chat history storage](docs/adr/2026-08-11-chat-history-storage.md)
 - [Message queue persistence](docs/adr/2026-08-11-message-queue-persistence.md)
+- [Fly.io provisioning](docs/adr/2026-08-18-fly-io-provisioning.md)
 
 See [`docs/TASK_TRACKER.md`](docs/TASK_TRACKER.md) for what's implemented
 versus still open.
@@ -150,6 +152,23 @@ VITE_SOCKET_URL=http://localhost:8080 pnpm --filter @chatme/client run dev
 ```
 
 Then open `http://localhost:5173`
+
+### Deploying to Fly.io
+
+[`infra/fly`](infra/fly) describes the same topology as
+infrastructure-as-code — the chat tier plus Postgres, Redis and a 3-node
+ScyllaDB cluster, each its own Fly app on a shared private network, with
+Fly Proxy in place of nginx:
+
+```bash
+fly auth login
+./infra/fly/provision.sh
+```
+
+> [!NOTE]
+> This is a proof of concept — it has never been deployed, and Postgres
+> and Redis run as single nodes with no backups. See
+> [`infra/fly/README.md`](infra/fly/README.md) for the gaps.
 
 ## 📝License
 

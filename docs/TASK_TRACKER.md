@@ -209,3 +209,13 @@ Completed: [ ]
 
 Grafana
 
+## Task 17 - Fly.io provisioning (IaC)
+
+Describe the deployed topology - chat server instances, Postgres, Redis
+and a 3-node ScyllaDB cluster - as infrastructure-as-code.
+
+Priority: Low
+Completed: [x] POC only, nothing deployed. Four Fly apps on one private
+network under `infra/fly/`, provisioned by `infra/fly/provision.sh`, with
+Fly Proxy replacing nginx. See docs/adr/2026-08-18-fly-io-provisioning.md
+for the trade-offs and infra/fly/README.md for the known gaps.
